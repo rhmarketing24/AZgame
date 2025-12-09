@@ -1,1 +1,2 @@
-
+/* Add minimal letter style; you can expand later */
+.letter { display:flex;align-items:center;justify-content:center; font-weight:800; font-size:22px; box-shadow:0 6px 12px rgba(0,0,0,0.12); }

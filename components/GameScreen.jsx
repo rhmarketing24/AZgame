@@ -1,262 +1,448 @@
+// components/GameScreen.jsx
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
-const ALPHABET = Array.from({ length: 26 }, (_, i) =>
-  String.fromCharCode(65 + i)
-);
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/**
- * Props:
- *  - autoStart (bool): যদি true হয়, mount হওয়ার পরে startGame() auto চালাবে (ব্যবহার Home থেকে)
- *  - compact (bool): ছোট বক্স চাইলে true
- *  - onBack (fn): back চাপলে কল হবে (optional)
- */
-export default function GameScreen({ autoStart = false, compact = true, onBack }) {
-  // host-provided user detection (best-effort)
-  const maybeUser =
-    (typeof window !== "undefined" &&
-      (window.__MINIKIT_USER__ ||
-        window.minikitUser ||
-        window.__minikit_user__ ||
-        (window?.parent && window.parent.__MINIKIT_USER__))) ||
-    null;
-  const userLabel = maybeUser?.username
-    ? `@${maybeUser.username}`
-    : "@anonymous";
-
-  // shuffled layout
-  const shuffled = useMemo(() => shuffle(ALPHABET), []);
-
-  const [phase, setPhase] = useState("idle"); // idle, countdown, playing, finished
-  const [countdown, setCountdown] = useState(3);
+export default function GameScreen() {
+  // UI / game states
+  const [userLabel, setUserLabel] = useState("@anonymous");
+  const [countdown, setCountdown] = useState(3); // 3..2..1 then start
+  const [started, setStarted] = useState(false);
   const [startTime, setStartTime] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef(null);
 
-  const [expectedIndex, setExpectedIndex] = useState(0);
-  const [statusMap, setStatusMap] = useState(() =>
-    Object.fromEntries(ALPHABET.map((l) => [l, "idle"]))
+  // letters: shuffled board for display
+  const letters = useMemo(() => {
+    const arr = Array.from({ length: 26 }, (_, i) =>
+      String.fromCharCode(65 + i)
+    );
+    // shuffle
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }, []); // one-time per mount
+
+  // track progress (next expected char index 0=A, 1=B, ...)
+  const [nextIndex, setNextIndex] = useState(0);
+
+  // per-button mark state: 'idle' | 'correct' | 'wrong'
+  const [marks, setMarks] = useState(() =>
+    Object.fromEntries(letters.map((l) => [l, "idle"]))
   );
 
+  const [finished, setFinished] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Start sequence
-  function startGame() {
-    if (phase === "playing") return;
-    setSubmitted(false);
-    setStatusMap(Object.fromEntries(ALPHABET.map((l) => [l, "idle"])));
-    setExpectedIndex(0);
-    setCountdown(3);
-    setPhase("countdown");
+  // derive next letter
+  const nextLetter = String.fromCharCode(65 + nextIndex);
 
-    let cd = 3;
-    setCountdown(cd);
-    const cdTimer = setInterval(() => {
-      cd -= 1;
-      setCountdown(cd);
-      if (cd <= 0) {
-        clearInterval(cdTimer);
-        setPhase("playing");
-        const now = Date.now();
-        setStartTime(now);
-        setElapsed(0);
-        timerRef.current = setInterval(() => {
-          setElapsed((Date.now() - now) / 1000);
-        }, 100);
+  // preview: show some of the shuffled letters as small boxes (pick first 7)
+  const preview = letters.slice(0, 7);
+
+  // detect host-provided user
+  useEffect(() => {
+    try {
+      const maybe =
+        (typeof window !== "undefined" &&
+          (window.__MINIKIT_USER__ ||
+            window.minikitUser ||
+            window.__minikit_user__ ||
+            window.__FARCASTER_USER__ ||
+            window.farcasterUser)) ||
+        null;
+
+      if (maybe && typeof maybe === "object") {
+        // if object, try username property
+        const name =
+          maybe.username || maybe.handle || maybe.displayName || maybe.name;
+        if (name) return setUserLabel(name.startsWith("@") ? name : `@${name}`);
+      } else if (typeof maybe === "string" && maybe.length) {
+        return setUserLabel(maybe.startsWith("@") ? maybe : `@${maybe}`);
       }
-    }, 1000);
-  }
-
-  useEffect(() => {
-    if (autoStart) {
-      // small delay to ensure mount
-      const t = setTimeout(() => startGame(), 200);
-      return () => clearTimeout(t);
+    } catch (e) {
+      /* ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoStart]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    // default stays @anonymous
   }, []);
 
+  // countdown effect
   useEffect(() => {
-    if (phase === "finished" && timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    if (started) return;
+    if (countdown <= 0) {
+      // start
+      setStarted(true);
+      setStartTime(Date.now());
+      setCountdown(null);
+      return;
     }
-  }, [phase]);
 
+    const id = setTimeout(() => {
+      setCountdown((c) => (c !== null ? c - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(id);
+  }, [countdown, started]);
+
+  // elapsed timer while started and not finished
+  useEffect(() => {
+    if (!started || finished) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      setElapsed((Date.now() - startTime) / 1000);
+    }, 50);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [started, finished, startTime]);
+
+  // handle letter click
   function handleLetterClick(letter) {
-    if (phase !== "playing") return;
-    const expectedLetter = String.fromCharCode(65 + expectedIndex);
-    if (letter === expectedLetter) {
-      setStatusMap((m) => ({ ...m, [letter]: "correct" }));
-      const nextIndex = expectedIndex + 1;
-      setExpectedIndex(nextIndex);
-      if (nextIndex >= 26) {
-        setPhase("finished");
+    if (!started || finished) return;
+    // if letter already marked correct, ignore
+    if (marks[letter] === "correct") return;
+
+    const expected = String.fromCharCode(65 + nextIndex);
+    if (letter === expected) {
+      // mark correct
+      setMarks((m) => ({ ...m, [letter]: "correct" }));
+      // advance nextIndex
+      const newIndex = nextIndex + 1;
+      setNextIndex(newIndex);
+      // if finished all
+      if (newIndex >= 26) {
+        // finish
+        setFinished(true);
+        setElapsed((Date.now() - startTime) / 1000);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       }
     } else {
-      setStatusMap((m) => ({ ...m, [letter]: "wrong" }));
+      // mark wrong briefly
+      setMarks((m) => ({ ...m, [letter]: "wrong" }));
       setTimeout(() => {
-        setStatusMap((m) => ({ ...m, [letter]: "idle" }));
-      }, 350);
+        setMarks((m) => ({ ...m, [letter]: "idle" }));
+      }, 400);
     }
   }
 
-  function handleSubmit() {
+  // submit score to /api/saveScore
+  async function handleSubmit() {
+    if (submitted) return;
     setSubmitted(true);
-    // TODO: POST to /api/saveScore (supabase) if desired
-  }
 
-  function handleShare() {
-    const text = `I completed Tap A→Z Rush in ${elapsed.toFixed(2)}s!`;
-    if (navigator.share) {
-      navigator.share({ title: "Tap A→Z Rush", text, url: window.location.href }).catch(() => {});
-    } else {
-      navigator.clipboard?.writeText(`${text} ${window.location.href}`);
-      alert("Score copied to clipboard.");
+    const payload = {
+      username: userLabel.replace(/^@/, ""),
+      time: Number(elapsed.toFixed(3)),
+    };
+
+    try {
+      const res = await fetch("/api/saveScore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      // optional: check response
+      // const data = await res.json();
+    } catch (err) {
+      console.error("submit error", err);
     }
   }
 
-  // grid: 7 rows x 4 cols => 28 cells. first 26 letters, 27th cell = Back button, last empty
-  const gridCells = [];
-  for (let i = 0; i < 28; i++) {
-    if (i < 26) gridCells.push({ type: "letter", value: shuffled[i] });
-    else if (i === 26) gridCells.push({ type: "back" });
-    else gridCells.push({ type: "empty" });
+  // restart game (play again) -> simply reload component states
+  function handlePlayAgain() {
+    // simple approach: reload page to reset memoized letters
+    if (typeof window !== "undefined") window.location.href = "/game";
   }
 
-  // styles (compact vs normal)
-  const boxSize = compact ? 64 : 82;
-  const boxFont = compact ? 20 : 24;
+  // Back goes home
+  // UI helpers
+  const formatTime = (t) => `${t.toFixed(3)} s`;
 
-  const styles = {
-    container: { minHeight: "100vh", background: "#0000FF", color: "#fff", padding: 20, fontFamily: "Arial, sans-serif", textAlign: "center" },
-    title: { fontSize: 34, fontWeight: 900, margin: "8px 0" },
-    topRowWrap: { maxWidth: 960, margin: "6px auto 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" },
-    leftBox: { flex: "1 1 180px", textAlign: "left" },
-    centerBox: { flex: "1 1 220px", textAlign: "center" },
-    rightBox: { flex: "1 1 180px", textAlign: "right" },
-    infoCard: { display: "inline-block", background: "rgba(255,255,255,0.12)", padding: "8px 14px", borderRadius: 10, fontWeight: 800, minWidth: 110 },
-    nextLabel: { marginTop: 8, fontWeight: 800 },
-    gridWrap: { maxWidth: 720, margin: "6px auto 12px" },
-    grid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, justifyItems: "center" },
-    box: { width: boxSize, height: boxSize, background: "#fff", color: "#0000FF", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: boxFont, cursor: "pointer", boxShadow: "0 6px 14px rgba(0,0,0,0.12)", transition: "all .08s ease" },
-    boxCorrect: { background: "#d4f8e0", color: "#007a37", transform: "scale(0.98)" },
-    boxWrong: { background: "#ffdfe0", color: "#b30000", transform: "scale(0.98)" },
-    backBtn: { display: "inline-block", padding: "10px 12px", background: "#fff", color: "#000", borderRadius: 10, fontWeight: 800, boxShadow: "0 6px 12px rgba(0,0,0,0.12)" },
-    actionsRow: { marginTop: 18, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" },
-    actionBtn: { padding: "10px 16px", borderRadius: 12, background: "#fff", color: "#0000FF", fontWeight: 800, cursor: "pointer" },
+  // layout style small helper
+  const btnStyle = {
+    padding: "12px 22px",
+    borderRadius: 999,
+    background: "#fff",
+    color: "#0000FF",
+    fontWeight: 800,
+    border: "none",
+    cursor: "pointer",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
   };
 
-  const nextLetter = expectedIndex < 26 ? String.fromCharCode(65 + expectedIndex) : "-";
-
   return (
-    <div style={styles.container}>
-      <div style={styles.title}>Tap A → Z Rush</div>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0000FF",
+        color: "#fff",
+        padding: 20,
+        fontFamily: "Arial, sans-serif",
+        textAlign: "center",
+      }}
+    >
+      {/* Header */}
+      <h1 style={{ fontSize: 40, fontWeight: 900, margin: 12 }}>
+        Tap A → Z Rush
+      </h1>
+      <div style={{ fontSize: 14, opacity: 0.95, marginBottom: 12 }}>
+        Playing as <strong style={{ color: "#fff" }}>{userLabel}</strong>
+      </div>
 
-      {/* top row: left = Timer, center = username, right = Next */}
-      <div style={styles.topRowWrap}>
-        <div style={styles.leftBox}>
-          <div style={styles.infoCard}>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>Timer</div>
-            <div style={{ fontSize: 16 }}>
-              {phase === "countdown" ? `Starting in ${countdown}s` : (phase === "playing" || phase === "finished") ? `${(elapsed || 0).toFixed(2)} s` : "0.00 s"}
-            </div>
+      {/* Timer / Next / Preview / Back line */}
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          justifyContent: "center",
+          flexWrap: "wrap",
+          marginBottom: 18,
+        }}
+      >
+        {/* Timer */}
+        <div
+          style={{
+            minWidth: 140,
+            padding: "12px 18px",
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.08)",
+            fontWeight: 800,
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Timer</div>
+          <div style={{ fontSize: 18, marginTop: 6 }}>
+            {!started && countdown !== null ? `${countdown} s` : formatTime(elapsed || 0)}
           </div>
         </div>
 
-        <div style={styles.centerBox}>
-          <div style={{ fontSize: 14, opacity: 0.95 }}>Playing as</div>
-          <div style={{ fontWeight: 900 }}>{userLabel}</div>
+        {/* Next */}
+        <div
+          style={{
+            minWidth: 120,
+            padding: "12px 18px",
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.08)",
+            fontWeight: 800,
+          }}
+        >
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Next</div>
+          <div style={{ fontSize: 18, marginTop: 6 }}>{nextLetter}</div>
         </div>
 
-        <div style={styles.rightBox}>
-          <div style={styles.infoCard}>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>Next</div>
-            <div style={{ fontSize: 16 }}>{nextLetter}</div>
+        {/* Preview boxes */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            padding: "8px 12px",
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.06)",
+            alignItems: "center",
+          }}
+        >
+          {preview.map((p) => (
+            <div
+              key={p}
+              style={{
+                minWidth: 28,
+                minHeight: 28,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "rgba(255,255,255,0.12)",
+                color: "#fff",
+                borderRadius: 8,
+                fontWeight: 800,
+                fontSize: 14,
+                padding: "6px 8px",
+              }}
+            >
+              {p}
+            </div>
+          ))}
+        </div>
+
+        {/* Back */}
+        <div style={{ marginLeft: 8 }}>
+          <Link href="/">
+            <button
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#0000FF",
+                border: "none",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Back
+            </button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Large Next label */}
+      {!finished && (
+        <div style={{ fontWeight: 800, marginBottom: 12 }}>Next: {nextLetter}</div>
+      )}
+
+      {/* Countdown overlay if not started */}
+      {!started && countdown !== null && (
+        <div style={{ marginBottom: 12, fontSize: 18, fontWeight: 800 }}>
+          Starting in {countdown}...
+        </div>
+      )}
+
+      {/* Board */}
+      <div
+        id="board"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 20,
+          maxWidth: 520,
+          margin: "12px auto 30px",
+        }}
+      >
+        {letters.map((l, idx) => {
+          const state = marks[l] || "idle";
+          const bg =
+            state === "correct" ? "#00C853" : state === "wrong" ? "#FF5252" : "#fff";
+          const color = state === "correct" ? "#fff" : "#0000FF";
+          const opacity = state === "idle" ? 1 : 1;
+
+          // make last row only 2 letters — but layout uses grid; for exact placement we keep grid and let blanks be present
+          return (
+            <button
+              key={l}
+              onClick={() => handleLetterClick(l)}
+              className="letter"
+              style={{
+                height: 72,
+                borderRadius: 14,
+                fontSize: 22,
+                fontWeight: 900,
+                background: bg,
+                color,
+                border: "none",
+                cursor: started && !finished ? "pointer" : "default",
+                boxShadow: "0 6px 12px rgba(0,0,0,0.12)",
+                transition: "transform .08s ease, background .12s ease",
+                transform: state === "wrong" ? "translateY(0)" : "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {l}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Footer area: when finished show results and actions */}
+      {finished ? (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontWeight: 900, fontSize: 26, marginBottom: 12 }}>
+            Completed in {formatTime(elapsed)}
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <button
+              onClick={handleSubmit}
+              style={{
+                ...btnStyle,
+                background: submitted ? "rgba(255,255,255,0.85)" : "#fff",
+                color: "#0000FF",
+                padding: "10px 18px",
+              }}
+            >
+              {submitted ? "Submitted ✓" : "Submit Score"}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button
+              onClick={() => (window.location.href = "/")}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#000",
+                border: "2px solid rgba(0,0,0,0.2)",
+                fontWeight: 700,
+              }}
+            >
+              Back
+            </button>
+
+            <Link href="/leaderboard">
+              <button
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: "rgba(255,255,255,0.95)",
+                  color: "#000",
+                  border: "2px solid rgba(0,0,0,0.15)",
+                  fontWeight: 700,
+                }}
+              >
+                See Leaderboard
+              </button>
+            </Link>
+
+            <button
+              onClick={handlePlayAgain}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#000",
+                border: "2px solid rgba(0,0,0,0.15)",
+                fontWeight: 700,
+              }}
+            >
+              Play again
+            </button>
           </div>
         </div>
-      </div>
-
-      <div style={{ marginTop: 6, fontWeight: 800 }}>Next: {nextLetter}</div>
-
-      {/* grid */}
-      <div style={styles.gridWrap}>
-        <div style={styles.grid}>
-          {gridCells.map((cell, idx) => {
-            if (cell.type === "letter") {
-              const letter = cell.value;
-              const status = statusMap[letter];
-              return (
-                <div
-                  key={`cell-${idx}-${letter}`}
-                  onClick={() => handleLetterClick(letter)}
-                  style={{
-                    ...styles.box,
-                    ...(status === "correct" ? styles.boxCorrect : {}),
-                    ...(status === "wrong" ? styles.boxWrong : {}),
-                    pointerEvents: status === "correct" ? "none" : "auto",
-                    opacity: status === "correct" ? 0.95 : 1,
-                  }}
-                >
-                  {letter}
-                </div>
-              );
-            } else if (cell.type === "back") {
-              return (
-                <div key={`back-${idx}`} style={{ display: "flex", justifyContent: "center" }}>
-                  {onBack ? (
-                    <button onClick={onBack} style={styles.backBtn}>Back</button>
-                  ) : (
-                    <Link href="/">
-                      <a style={styles.backBtn}>Back</a>
-                    </Link>
-                  )}
-                </div>
-              );
-            } else {
-              return <div key={`empty-${idx}`} />;
-            }
-          })}
+      ) : (
+        // while playing show small controls (Back + maybe nothing)
+        <div style={{ marginTop: 8, marginBottom: 30 }}>
+          <Link href="/">
+            <button
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "#fff",
+                color: "#000",
+                border: "2px solid rgba(0,0,0,0.15)",
+                fontWeight: 700,
+              }}
+            >
+              Back
+            </button>
+          </Link>
         </div>
-      </div>
-
-      {/* bottom actions */}
-      <div style={styles.actionsRow}>
-        {phase === "idle" && <button onClick={startGame} style={styles.actionBtn}>Play</button>}
-        {phase === "countdown" && <div style={styles.infoCard}>Get ready...</div>}
-        {phase === "playing" && <div style={styles.infoCard}>Playing — click letters A → Z</div>}
-
-        {phase === "finished" && (
-          <>
-            <div style={{ width: "100%", textAlign: "center" }}>
-              <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 8 }}>Completed in {(elapsed || 0).toFixed(3)}s</div>
-              <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-                <button onClick={handleSubmit} style={styles.actionBtn}>{submitted ? "Submitted ✓" : "Submit Score"}</button>
-                <button onClick={() => { setPhase("idle"); setElapsed(0); setStartTime(null); setStatusMap(Object.fromEntries(ALPHABET.map((l) => [l, "idle"]))); setExpectedIndex(0); }} style={styles.actionBtn}>Play again</button>
-                <Link href="/leaderboard"><a style={styles.backBtn}>See Leaderboard</a></Link>
-                <button onClick={handleShare} style={styles.actionBtn}>Share</button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      )}
     </div>
   );
 }

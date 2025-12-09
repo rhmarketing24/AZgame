@@ -1,29 +1,20 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 
 /**
  * GameScreen.jsx
- *
- * - Paste this file to components/GameScreen.jsx (replace existing)
- * - Designed as a self-contained client component with inline styles
- *
- * Behavior:
- *  - Visit home -> Play -> 3s countdown -> game starts
- *  - Board letters are shuffled and shown as buttons
- *  - Must click letters in A -> Z order. "Next" shows target letter.
- *  - Correct click: green flash. Wrong click: red flash.
- *  - Game UI: Playing as, Timer, Next, shuffled preview, Back
- *  - After finishing: Submit / See Leaderboard / Back / Play again / Share
+ * - Paste this file as components/GameScreen.jsx (replace existing)
+ * - Uses only inline styles so no external stylesheet edits needed
  */
 
 const ALPHABET = Array.from({ length: 26 }, (_, i) =>
   String.fromCharCode(65 + i)
 );
 
-function shuffleArray(arr) {
-  const a = arr.slice();
+function shuffle(arr) {
+  const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
@@ -32,449 +23,341 @@ function shuffleArray(arr) {
 }
 
 export default function GameScreen() {
-  // user detection (host-provided globals sometimes set by Base/minikit)
-  const [userLabel, setUserLabel] = useState("@anonymous");
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const maybe =
-        window.__MINIKIT_USER__ ||
-        window.__minikit_user__ ||
+  // Try to detect host-provided username (Base / MiniKit style globals)
+  const maybeUser =
+    (typeof window !== "undefined" &&
+      (window.__MINIKIT_USER__ ||
         window.minikitUser ||
-        window.__MINIKIT_USER_EAPI__ ||
-        null;
-      if (maybe && typeof maybe === "object") {
-        // try shape with username or displayName
-        const name = maybe.username || maybe.name || maybe.displayName;
-        if (name) {
-          setUserLabel("@" + name);
-          return;
-        }
-      }
-      // fallback to global string if set
-      if (window.MINIKIT_USERNAME) {
-        setUserLabel("@" + window.MINIKIT_USERNAME);
-        return;
-      }
-    }
-    setUserLabel("@anonymous");
-  }, []);
+        window.__minikit_user__ ||
+        (window?.parent && window.parent.__MINIKIT_USER__))) ||
+    null;
+  const userLabel = maybeUser?.username
+    ? `Playing as @${maybeUser.username}`
+    : "Playing as @anonymous";
 
-  // Game UI state
-  const [phase, setPhase] = useState("home"); // home | countdown | playing | finished
+  // Shuffle letters for board layout (random positions)
+  const shuffled = useMemo(() => shuffle(ALPHABET), []);
+
+  // game state
+  const [phase, setPhase] = useState("idle"); // idle, countdown, playing, finished
   const [countdown, setCountdown] = useState(3);
-  const [shuffled, setShuffled] = useState(() => shuffleArray(ALPHABET));
-  const [targetIndex, setTargetIndex] = useState(0); // 0..25
   const [startTime, setStartTime] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef(null);
 
-  // UI feedback per-letter: "normal" | "correct" | "wrong"
-  const [feedback, setFeedback] = useState({}); // { "A": "correct" }
+  // index we expect next (0 => 'A')
+  const [expectedIndex, setExpectedIndex] = useState(0);
+  // visual status per letter: 'idle' | 'correct' | 'wrong'
+  const [statusMap, setStatusMap] = useState(() =>
+    Object.fromEntries(ALPHABET.map((l) => [l, "idle"]))
+  );
 
-  // finished score (seconds)
-  const [scoreSeconds, setScoreSeconds] = useState(null);
+  // submission status
   const [submitted, setSubmitted] = useState(false);
 
-  // Reset game helper
-  function resetGame() {
-    setShuffled(shuffleArray(ALPHABET));
-    setTargetIndex(0);
-    setStartTime(null);
-    setElapsed(0);
-    setScoreSeconds(null);
+  // Start countdown then start game
+  function startGame() {
     setSubmitted(false);
-    setFeedback({});
-    setPhase("home");
-    clearInterval(timerRef.current);
-    timerRef.current = null;
-  }
-
-  // start countdown then game
-  function onStartClick() {
-    setPhase("countdown");
+    setStatusMap(Object.fromEntries(ALPHABET.map((l) => [l, "idle"])));
+    setExpectedIndex(0);
     setCountdown(3);
-    let c = 3;
-    const cd = setInterval(() => {
-      c -= 1;
-      setCountdown(c);
-      if (c <= 0) {
-        clearInterval(cd);
-        startPlaying();
+    setPhase("countdown");
+
+    let cd = 3;
+    const cdTimer = setInterval(() => {
+      cd -= 1;
+      setCountdown(cd);
+      if (cd <= 0) {
+        clearInterval(cdTimer);
+        // start playing
+        setPhase("playing");
+        const now = Date.now();
+        setStartTime(now);
+        setElapsed(0);
+        timerRef.current = setInterval(() => {
+          setElapsed((Date.now() - now) / 1000);
+        }, 100);
       }
     }, 1000);
   }
 
-  function startPlaying() {
-    setPhase("playing");
-    setStartTime(Date.now());
-    // start elapsed timer
-    timerRef.current = setInterval(() => {
-      setElapsed((Date.now() - (startTime || Date.now())) / 1000);
-    }, 100);
-    // ensure startTime correctly set
-    setStartTime(Date.now());
-  }
-
-  // Keep elapsed accurate using effect when startTime changes
+  // Stop timer when finished/unmount
   useEffect(() => {
-    if (!startTime) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setElapsed((Date.now() - startTime) / 1000);
-    }, 100);
     return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // When game finished
+  useEffect(() => {
+    if (phase === "finished" && timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
-    };
-  }, [startTime]);
-
-  // Stop timer when finished
-  useEffect(() => {
-    if (phase === "finished") {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
     }
   }, [phase]);
 
-  // derived
-  const nextLetter = ALPHABET[targetIndex] || null;
-
-  // Handler when user clicks a letter button
   function handleLetterClick(letter) {
     if (phase !== "playing") return;
-    if (!nextLetter) return;
-
-    if (letter === nextLetter) {
+    const expectedLetter = String.fromCharCode(65 + expectedIndex);
+    if (letter === expectedLetter) {
       // correct
-      setFeedback((f) => ({ ...f, [letter]: "correct" }));
-      // small delay to show green, then advance
-      setTimeout(() => {
-        setFeedback((f) => ({ ...f, [letter]: "normal" }));
-      }, 350);
-
-      const newIndex = targetIndex + 1;
-      if (newIndex >= ALPHABET.length) {
+      setStatusMap((m) => ({ ...m, [letter]: "correct" }));
+      const nextIndex = expectedIndex + 1;
+      setExpectedIndex(nextIndex);
+      if (nextIndex >= 26) {
         // finished
-        setTargetIndex(newIndex);
-        finishGame();
-      } else {
-        setTargetIndex(newIndex);
+        setPhase("finished");
       }
     } else {
       // wrong
-      setFeedback((f) => ({ ...f, [letter]: "wrong" }));
+      setStatusMap((m) => ({ ...m, [letter]: "wrong" }));
+      // reset wrong color after short
       setTimeout(() => {
-        setFeedback((f) => ({ ...f, [letter]: "normal" }));
-      }, 450);
+        setStatusMap((m) => ({ ...m, [letter]: "idle" }));
+      }, 400);
     }
   }
 
-  function finishGame() {
-    // stop timer, set score
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    const final = (Date.now() - (startTime || Date.now())) / 1000;
-    setScoreSeconds(final);
-    setElapsed(final);
-    setPhase("finished");
+  function handleSubmit() {
+    // Example: show submitted
+    setSubmitted(true);
+    // Here you could POST to /api/saveScore with elapsed and username
   }
 
-  // Submit (example: calls /api/saveScore if exists) - here just simulate
-  async function submitScore() {
-    if (!scoreSeconds) return;
-    try {
-      // Optionally: call your /api/saveScore endpoint with fetch
-      // const res = await fetch('/api/saveScore', { method:'POST', body: JSON.stringify({ player: userLabel, score_seconds: scoreSeconds }) })
-      // if (res.ok) { ... }
-
-      // For now we simulate successful submit
-      setSubmitted(true);
-    } catch (err) {
-      console.error("submit error", err);
-      alert("Failed to submit score.");
-    }
-  }
-
-  // Share: use Web Share API if available, else copy text
-  async function onShare() {
-    const text = `I completed Tap A→Z Rush in ${scoreSeconds?.toFixed(2)}s — ${userLabel}`;
-    const url = typeof window !== "undefined" ? window.location.href : "";
+  function handleShare() {
+    const text = `I completed Tap A→Z Rush in ${elapsed.toFixed(2)}s!`;
     if (navigator.share) {
-      try {
-        await navigator.share({ title: "Tap A→Z Rush", text, url });
-      } catch (e) {
-        // user cancelled
-      }
+      navigator
+        .share({
+          title: "Tap A→Z Rush",
+          text,
+          url: window.location.href,
+        })
+        .catch(() => {});
     } else {
-      try {
-        await navigator.clipboard.writeText(`${text}\n${url}`);
-        alert("Score text copied to clipboard. Share it!");
-      } catch (e) {
-        alert("Sharing not available.");
-      }
+      // fallback: copy to clipboard
+      navigator.clipboard?.writeText(`${text} ${window.location.href}`);
+      alert("Score copied to clipboard (fallback).");
     }
   }
 
-  // Render helpers: inline styles
+  // Build grid of 7 rows x 4 cols = 28 cells.
+  // Fill first 26 with shuffled letters, cell 26 -> Back button, cell 27 empty
+  const gridCells = [];
+  for (let i = 0; i < 28; i++) {
+    if (i < 26) {
+      gridCells.push({ type: "letter", value: shuffled[i] });
+    } else if (i === 26) {
+      gridCells.push({ type: "back" });
+    } else {
+      gridCells.push({ type: "empty" });
+    }
+  }
+
+  // styles
   const styles = {
-    page: {
+    container: {
       minHeight: "100vh",
       background: "#0000FF",
-      color: "#FFFFFF",
-      fontFamily: "Arial, Helvetica, sans-serif",
-      padding: 20,
-      boxSizing: "border-box",
+      color: "#fff",
+      padding: "24px 18px 80px",
+      fontFamily: "Arial, sans-serif",
       textAlign: "center",
     },
-    headerTitle: {
-      fontSize: 36,
-      fontWeight: 800,
-      margin: "10px 0 4px 0",
-    },
-    smallText: { opacity: 0.95 },
+    title: { fontSize: 36, fontWeight: 900, margin: "6px 0" },
+    playingAs: { opacity: 0.95, marginBottom: 12 },
     topRow: {
       display: "flex",
-      justifyContent: "center",
-      gap: 20,
+      justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 18,
-      marginTop: 8,
+      gap: 12,
+      margin: "12px auto 24px",
+      maxWidth: 920,
+      padding: "4px",
+      flexWrap: "wrap",
     },
-    badge: {
+    infoBox: {
       background: "rgba(255,255,255,0.12)",
-      padding: "8px 14px",
-      borderRadius: 10,
-      fontWeight: 700,
-      minWidth: 140,
-    },
-    nextBox: {
-      fontWeight: 800,
-      fontSize: 18,
-      marginTop: 6,
-    },
-    controls: { marginTop: 18 },
-    bigPlay: {
-      padding: "14px 28px",
-      background: "#fff",
-      color: "#0000FF",
-      borderRadius: 999,
-      border: "none",
-      fontWeight: 800,
-      fontSize: 18,
-      cursor: "pointer",
-    },
-    secondaryBtn: {
-      marginLeft: 10,
       padding: "10px 16px",
-      borderRadius: 10,
-      background: "transparent",
-      color: "#fff",
-      border: "2px solid rgba(255,255,255,0.18)",
-      cursor: "pointer",
+      borderRadius: 12,
+      minWidth: 140,
+      fontWeight: 700,
     },
-    boardWrap: {
-      margin: "20px auto",
-      maxWidth: 480,
+    gridWrap: { maxWidth: 720, margin: "8px auto 16px" },
+    nextLabel: { fontSize: 18, fontWeight: 800, margin: "10px 0" },
+    grid: {
       display: "grid",
       gridTemplateColumns: "repeat(4, 1fr)",
-      gap: 14,
+      gap: 18,
       justifyContent: "center",
+      alignItems: "center",
     },
-    letterBtn: {
+    box: {
       background: "#fff",
       color: "#0000FF",
-      height: 72,
+      height: 78,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       borderRadius: 14,
-      border: "none",
+      fontWeight: 900,
       fontSize: 22,
-      fontWeight: 800,
       cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
+      userSelect: "none",
       boxShadow: "0 6px 12px rgba(0,0,0,0.12)",
-      transition: "transform 0.08s ease, background 0.12s ease",
+      transition: "transform .08s ease, background .12s ease, color .08s ease",
     },
-    backLink: {
-      display: "inline-block",
-      marginTop: 10,
-      padding: "8px 12px",
-      borderRadius: 8,
-      background: "rgba(255,255,255,0.95)",
+    boxCorrect: { background: "#d4f8e0", color: "#007a37", transform: "scale(0.98)" },
+    boxWrong: { background: "#ffdfe0", color: "#b30000", transform: "scale(0.98)" },
+    backButton: {
+      background: "#fff",
       color: "#000",
-      textDecoration: "none",
-    },
-    footerBtns: {
-      marginTop: 20,
-      display: "flex",
-      gap: 12,
-      justifyContent: "center",
+      padding: "10px 12px",
+      borderRadius: 10,
+      fontWeight: 800,
+      height: 48,
+      display: "inline-flex",
       alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 4px 8px rgba(0,0,0,0.12)",
     },
-    smallGhost: {
-      padding: "8px 12px",
-      borderRadius: 8,
-      background: "#eee",
-      color: "#000",
+    footerButtons: { marginTop: 18, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" },
+    actionBtn: {
+      padding: "10px 18px",
+      borderRadius: 12,
+      background: "#fff",
+      color: "#0000FF",
+      fontWeight: 800,
+      border: "none",
       cursor: "pointer",
     },
-    statusGreen: { background: "#3CE08A", color: "#062F1A" },
-    statusRed: { background: "#FF6B6B", color: "#3B0A0A" },
   };
 
-  // dynamic style for letter (correct/wrong)
-  function letterStyle(letter) {
-    const f = feedback[letter] || "normal";
-    const base = { ...styles.letterBtn };
-    if (f === "correct") {
-      return { ...base, background: "#E9FFF3", color: "#0A8C4A", transform: "scale(0.98)" };
-    }
-    if (f === "wrong") {
-      return { ...base, background: "#FFECEC", color: "#A60F0F", transform: "scale(0.98)" };
-    }
-    return base;
-  }
-
-  // show preview small boxes (randomized) — optional small row
-  const preview = useMemo(() => shuffleArray(ALPHABET).slice(0, 8), []);
+  const nextLetter = expectedIndex < 26 ? String.fromCharCode(65 + expectedIndex) : "-";
 
   return (
-    <div style={styles.page}>
-      {/* Header */}
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <div style={styles.headerTitle}>Tap A → Z Rush</div>
-        <div style={styles.smallText}>Playing as {userLabel}</div>
+    <div style={styles.container}>
+      <div style={{ maxWidth: 920, margin: "0 auto" }}>
+        <div style={styles.title}>Tap A → Z Rush</div>
+        <div style={styles.playingAs}>{userLabel}</div>
 
-        {/* top row: timer + next + preview + back */}
+        {/* TOP LINE: Timer + Next (in one line) and Back */}
         <div style={styles.topRow}>
-          <div style={styles.badge}>
+          <div style={{ ...styles.infoBox, textAlign: "center" }}>
             <div style={{ fontSize: 12, opacity: 0.9 }}>Timer</div>
-            <div style={{ fontSize: 18, marginTop: 4, fontWeight: 900 }}>
-              {phase === "playing" || phase === "finished"
-                ? `${(elapsed || 0).toFixed(2)} s`
-                : phase === "countdown"
+            <div style={{ fontSize: 18, fontWeight: 900 }}>
+              {phase === "countdown"
                 ? `Starting in ${countdown}s`
-                : "Ready"}
+                : (phase === "playing" || phase === "finished")
+                ? `${(elapsed || 0).toFixed(2)} s`
+                : "0.00 s"}
             </div>
           </div>
 
-          <div style={styles.badge}>
+          <div style={{ ...styles.infoBox, textAlign: "center" }}>
             <div style={{ fontSize: 12, opacity: 0.9 }}>Next</div>
-            <div style={{ fontSize: 18, marginTop: 4, fontWeight: 900 }}>
-              {nextLetter || "-"}
-            </div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>{nextLetter}</div>
           </div>
 
-          <div style={{ ...styles.badge, minWidth: 220 }}>
-            <div style={{ fontSize: 12, opacity: 0.9 }}>Preview</div>
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 6, flexWrap: "wrap" }}>
-              {preview.map((p) => (
-                <div key={p} style={{ background: "rgba(255,255,255,0.14)", padding: "6px 8px", borderRadius: 8, fontWeight: 800 }}>{p}</div>
-              ))}
-            </div>
-          </div>
-
-          <div>
+          {/* Back on the right */}
+          <div style={{ marginLeft: "auto" }}>
             <Link href="/">
-              <a style={styles.backLink}>Back</a>
+              <a style={styles.backButton}>Back</a>
             </Link>
           </div>
         </div>
 
-        {/* Main controls area */}
-        <div style={styles.controls}>
-          {phase === "home" && (
-            <>
-              <div style={{ marginTop: 8, marginBottom: 12 }}>
-                <button style={styles.bigPlay} onClick={onStartClick}>
-                  Play
-                </button>
-              </div>
-              <div>
-                <button style={styles.secondaryBtn} onClick={() => window.location.href = "/leaderboard"}>
-                  Leaderboard
-                </button>
-              </div>
-              <div style={{ marginTop: 14, opacity: 0.9 }}>Tap A→Z as fast as you can!</div>
-            </>
+        {/* "Next: X" label */}
+        <div style={styles.nextLabel}>Next: {nextLetter}</div>
+
+        {/* Grid */}
+        <div style={styles.gridWrap}>
+          <div style={styles.grid}>
+            {gridCells.map((cell, idx) => {
+              if (cell.type === "letter") {
+                const letter = cell.value;
+                const status = statusMap[letter];
+                return (
+                  <div
+                    key={`c-${idx}-${letter}`}
+                    onClick={() => handleLetterClick(letter)}
+                    role="button"
+                    aria-label={`letter-${letter}`}
+                    style={{
+                      ...styles.box,
+                      ...(status === "correct" ? styles.boxCorrect : {}),
+                      ...(status === "wrong" ? styles.boxWrong : {}),
+                      opacity: status === "correct" ? 0.9 : 1,
+                      pointerEvents: phase === "playing" && status !== "correct" ? "auto" : status === "correct" ? "none" : "auto",
+                    }}
+                  >
+                    {letter}
+                  </div>
+                );
+              } else if (cell.type === "back") {
+                return (
+                  <div key={`back-${idx}`} style={{ display: "flex", justifyContent: "center" }}>
+                    <Link href="/">
+                      <a style={styles.backButton}>Back</a>
+                    </Link>
+                  </div>
+                );
+              } else {
+                return <div key={`empty-${idx}`} />;
+              }
+            })}
+          </div>
+        </div>
+
+        {/* Footer area: controls / play / submit / share */}
+        <div style={styles.footerButtons}>
+          {phase === "idle" && (
+            <button onClick={startGame} style={styles.actionBtn}>
+              Play
+            </button>
           )}
 
-          {phase === "countdown" && (
-            <div style={{ marginTop: 18 }}>
-              <div style={{ fontSize: 42, fontWeight: 800 }}>{countdown}</div>
-              <div style={{ marginTop: 8 }}>Get ready...</div>
-            </div>
+          {phase === "countdown" && <div style={{ ...styles.infoBox }}>Get ready...</div>}
+
+          {phase === "playing" && (
+            <div style={{ ...styles.infoBox }}>Playing — tap the letters in order A → Z</div>
           )}
 
-          {(phase === "playing" || phase === "finished") && (
+          {phase === "finished" && (
             <>
-              <div style={{ marginTop: 10, fontWeight: 700, fontSize: 20 }}>
-                {phase === "playing" ? `Next: ${nextLetter}` : `Completed in ${scoreSeconds?.toFixed(3)}s`}
+              <div style={{ width: "100%", textAlign: "center", marginTop: 12 }}>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  Completed in {(elapsed || 0).toFixed(3)}s
+                </div>
+
+                <div style={{ marginTop: 12, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button onClick={handleSubmit} style={styles.actionBtn}>
+                    {submitted ? "Submitted ✓" : "Submit Score"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      // reset to play again
+                      setPhase("idle");
+                      setElapsed(0);
+                      setStartTime(null);
+                      setStatusMap(Object.fromEntries(ALPHABET.map((l) => [l, "idle"])));
+                      setExpectedIndex(0);
+                    }}
+                    style={styles.actionBtn}
+                  >
+                    Play again
+                  </button>
+
+                  <Link href="/leaderboard">
+                    <a style={{ ...styles.backButton, display: "inline-flex", alignItems: "center" }}>See Leaderboard</a>
+                  </Link>
+
+                  <button onClick={handleShare} style={styles.actionBtn}>
+                    Share
+                  </button>
+                </div>
               </div>
-
-              {/* Board */}
-              {phase === "playing" && (
-                <div style={styles.boardWrap}>
-                  {shuffled.map((L) => (
-                    <button
-                      key={L}
-                      onClick={() => handleLetterClick(L)}
-                      style={letterStyle(L)}
-                      aria-label={`Letter ${L}`}
-                    >
-                      {L}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* finished controls */}
-              {phase === "finished" && (
-                <div>
-                  <div style={{ marginTop: 18 }}>
-                    {!submitted ? (
-                      <button
-                        onClick={submitScore}
-                        style={{ ...styles.bigPlay, background: "#fff", color: "#0000FF" }}
-                      >
-                        Submit Score
-                      </button>
-                    ) : (
-                      <div style={{ ...styles.bigPlay, background: "#eee", color: "#222" }}>Submitted ✓</div>
-                    )}
-                  </div>
-
-                  <div style={styles.footerBtns}>
-                    <button onClick={() => { resetGame(); }} style={styles.smallGhost}>Back</button>
-                    <button onClick={() => { window.location.href = "/leaderboard"; }} style={styles.smallGhost}>See Leaderboard</button>
-                    <button onClick={() => { // play again
-                      // quick restart: reshuffle and start countdown
-                      setShuffled(shuffleArray(ALPHABET));
-                      setTargetIndex(0);
-                      setScoreSeconds(null);
-                      setSubmitted(false);
-                      setPhase("countdown");
-                      setCountdown(3);
-                      let c = 3;
-                      const cd = setInterval(() => {
-                        c -= 1;
-                        setCountdown(c);
-                        if (c <= 0) {
-                          clearInterval(cd);
-                          startPlaying();
-                        }
-                      }, 1000);
-                    }} style={styles.smallGhost}>Play again</button>
-
-                    <button onClick={onShare} style={styles.smallGhost}>Share</button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

@@ -1,4 +1,4 @@
-import "../styles/globals.css";
+// pages/index.js
 import dynamic from "next/dynamic";
 
 const Game = dynamic(() => import("../components/Game"), { ssr: false });

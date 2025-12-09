@@ -1,8 +1,5 @@
-// pages/index.js
-import dynamic from "next/dynamic";
-
-const Game = dynamic(() => import("../components/Game"), { ssr: false });
+import HomeScreen from "../components/HomeScreen";
 
 export default function Home() {
-  return <Game />;
+  return <HomeScreen />;
 }

@@ -1,0 +1,8 @@
+{
+  "name": "Tap A-Z Rush",
+  "short_name": "A-Z Rush",
+  "start_url": "/",
+  "display": "standalone",
+  "description": "A\u2192Z Tap Game with Base Username Leaderboard",
+  "icons": []
+}

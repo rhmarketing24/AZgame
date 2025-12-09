@@ -1,15 +1,24 @@
-import { supabase } from "../../lib/supabase";
+// pages/api/leaderboard.js
+
+import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(req, res) {
-  const { data, error } = await supabase
-    .from("leaderboard")
-    .select("*")
-    .order("score_seconds", { ascending: true })
-    .limit(20);
+  try {
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
-  if (error) {
-    return res.status(500).json({ error: error.message });
+    const { data, error } = await supabase
+      .from("scores")
+      .select("*")
+      .order("time", { ascending: true })
+      .limit(10);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    return res.status(200).json({ data });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
-
-  return res.status(200).json({ data });
 }

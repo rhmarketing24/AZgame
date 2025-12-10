@@ -1,0 +1,6 @@
+{
+  "name": "AZgame",
+  "short_name": "AZgame",
+  "start_url": "/",
+  "display": "standalone"
+}

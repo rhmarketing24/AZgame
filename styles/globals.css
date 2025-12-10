@@ -1,0 +1,16 @@
+@import './game.css';
+html,body,#__next { height:100%; }
+body { margin:0; font-family: Arial, sans-serif; background:#0000FF; color:#fff; text-align:center; }
+.container { max-width:900px; margin:0 auto; padding:20px; }
+.header { font-size:40px; font-weight:800; margin-top:10px; }
+.small { font-size:14px; opacity:0.9; }
+.controls { display:flex; gap:12px; justify-content:center; align-items:center; margin:18px 0; flex-wrap:wrap;}
+.btn { background:#fff;color:#0000FF;padding:12px 28px;border-radius:28px;border:none; font-weight:700; cursor:pointer;}
+.btn-outline { background:transparent;border:2px solid rgba(255,255,255,0.2); padding:8px 18px;border-radius:10px; color:#fff; }
+.grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:20px; max-width:520px; margin:10px auto; }
+.letter { background:#fff; color:#0000FF; height:72px; display:flex; align-items:center; justify-content:center; border-radius:14px; font-weight:800; font-size:22px; cursor:pointer; user-select:none; }
+.letter.correct { background: #b6f2c8; color:#005500; }
+.letter.wrong { background: #ffd6d6; color:#990000; }
+.preview { display:flex; gap:8px; padding:12px; background: rgba(255,255,255,0.06); border-radius:12px; align-items:center; }
+.timer-box { padding:16px; border-radius:12px; background: rgba(255,255,255,0.06); min-width:140px; }
+.footer-buttons { display:flex; gap:10px; justify-content:center; margin-top:18px; }

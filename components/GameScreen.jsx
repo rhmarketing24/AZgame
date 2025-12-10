@@ -207,29 +207,25 @@ export default function GameScreen(){
           </div>
         )}
 
-        {/* Next indicator (redundant but safe) */}
-        <div style={{textAlign:'center', marginTop:12}}>
-          <h3 style={{margin:0, fontSize:16}}>Next: <span style={{fontWeight:800}}>{nextLetter || '—'}</span></h3>
-        </div>
-
         {/* Board: 7 rows x 4 cols */}
         <div style={styles.boardGap}>
           { makeGridFromShuffled(shuffled).map((row, rIdx) => (
             <div key={rIdx} style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:10}}>
               {row.map((cell, cIdx) => {
                 const isLastRow = rIdx === 6;
-                // last row: cells 0 & 1 normal, cells 2+3 -> Back button spanning 2 cols (render at cIdx===3)
-                if(isLastRow && cIdx === 2) return null;
-                if(isLastRow && cIdx === 3){
+                // last row: render Back at cIdx === 2 (span 2 columns), skip cIdx === 3
+                if(isLastRow && cIdx === 3) return null;
+                if(isLastRow && cIdx === 2){
                   return (
                     <div key={'back-'+rIdx} style={{gridColumn:'span 2', display:'flex', alignItems:'center', justifyContent:'center'}}>
                       <Link href="/"><button style={{
-                        padding:'12px 10px',
+                        padding:'14px 12px',
                         borderRadius:12,
                         background:'#fee2e2',
                         border:'1px solid #fecaca',
                         width:'100%',
                         fontWeight:800,
+                        fontSize:16,
                         color:'#b91c1c',
                         cursor:'pointer'
                       }}>← Back</button></Link>
@@ -246,10 +242,10 @@ export default function GameScreen(){
                 let background = '#f8fafc'; // default very light
                 let color = '#0b1220'; // default dark text
                 if(isClicked){
-                  background = '#10b981'; // teal/green
+                  background = '#10b981'; // green
                   color = '#ffffff';
                 } else if(isWrong){
-                  background = '#fb7185'; // rose-400
+                  background = '#fb7185'; // red
                   color = '#ffffff';
                 }
 

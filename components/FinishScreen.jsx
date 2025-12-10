@@ -1,1 +1,0 @@
-export default function FinishScreen(){return <div>Finished</div>; }

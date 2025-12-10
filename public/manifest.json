@@ -1,0 +1,8 @@
+{
+  "name": "Tap A \u2192 Z Rush",
+  "short_name": "A-Z Rush",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0000FF",
+  "theme_color": "#0000FF"
+}

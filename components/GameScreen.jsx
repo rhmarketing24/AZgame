@@ -3,7 +3,6 @@ import { useEffect, useState, useRef } from 'react';
 import Countdown from './Countdown';
 import FinishScreen from './FinishScreen';
 import Link from 'next/link';
-// import { supabase } from '../lib/supabase'; // optional: uncomment if you use supabase elsewhere
 
 const ALPH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
@@ -20,14 +19,13 @@ export default function GameScreen(){
 
   // UI state for marking clicked/disabled letters and wrong flashes
   const [clickedLetters, setClickedLetters] = useState([]); // letters that were clicked correctly
-  const [wrongLetters, setWrongLetters] = useState([]); // letters currently showing wrong flash
+  const [wrongLetters, setWrongLetters] = useState([]); // letters currently flashing wrong
 
   const intervalRef = useRef(null);
 
-  // initialize board on mount (shuffle alphabet)
   useEffect(()=> {
     setShuffled(shuffle(ALPH));
-    // reset other states in case of hot-reload
+    // reset
     setNextIndex(0);
     setRunning(false);
     setStartTime(null);
@@ -38,7 +36,6 @@ export default function GameScreen(){
     setWrongLetters([]);
   },[]);
 
-  // timer effect
   useEffect(()=> {
     if(running){
       if(intervalRef.current) clearInterval(intervalRef.current);
@@ -56,12 +53,10 @@ export default function GameScreen(){
   const nextLetter = ALPH[nextIndex] || null;
 
   function handleStart(){
-    // start countdown UI
     setCountdown(true);
   }
   function onCountdownFinish(){
     setCountdown(false);
-    // begin game
     setRunning(true);
     setStartTime(Date.now());
     setElapsed(0);
@@ -70,7 +65,6 @@ export default function GameScreen(){
     setWrongLetters([]);
     setFinished(false);
     setSubmitted(false);
-    // shuffle letters for fresh start
     setShuffled(shuffle(ALPH));
   }
 
@@ -78,17 +72,14 @@ export default function GameScreen(){
     if(!running) return;
     if(finished) return;
     if(!letter) return; // empty slot
-    // prevent re-clicking already-correct-letter
-    if(clickedLetters.includes(letter)) return;
+    if(clickedLetters.includes(letter)) return; // already clicked correct
 
     if(letter === nextLetter){
-      // correct click
+      // correct
       setClickedLetters(prev => [...prev, letter]);
       setNextIndex(i => {
         const ni = i + 1;
-        // check finish condition
         if(ni >= ALPH.length){
-          // finished
           setRunning(false);
           setFinished(true);
           setElapsed((Date.now() - startTime)/1000);
@@ -96,14 +87,11 @@ export default function GameScreen(){
         return ni;
       });
     } else {
-      // wrong click: mark temporarily
-      setWrongLetters(prev => {
-        if(prev.includes(letter)) return prev;
-        return [...prev, letter];
-      });
+      // wrong flash (state-driven)
+      setWrongLetters(prev => (prev.includes(letter) ? prev : [...prev, letter]));
       setTimeout(()=> {
         setWrongLetters(prev => prev.filter(x => x !== letter));
-      }, 500);
+      }, 450);
     }
   }
 
@@ -121,7 +109,6 @@ export default function GameScreen(){
   }
 
   function retry(){
-    // reset
     setShuffled(shuffle(ALPH));
     setNextIndex(0);
     setRunning(false);
@@ -134,10 +121,10 @@ export default function GameScreen(){
     setCountdown(false);
   }
 
-  // Build 7x4 grid from shuffled letters (first 26 letters fill first 26 slots, rest empty)
+  // 7x4 grid builder (pads to 28)
   function makeGridFromShuffled(arr){
     const items = [...arr];
-    while(items.length < 28) items.push(''); // pad to 28
+    while(items.length < 28) items.push('');
     const rows = [];
     for(let i=0;i<7;i++){
       rows.push(items.slice(i*4, i*4 + 4));
@@ -145,71 +132,70 @@ export default function GameScreen(){
     return rows;
   }
 
-  // helper to get user initials
+  // initials for avatar
   const initials = (user || '@').split(' ').map(s=>s[0]||'').slice(0,2).join('').toUpperCase();
 
+  // Styles inline to keep single-file easy to drop in; change to classes if you prefer
+  const styles = {
+    container: { padding:16, display:'flex', justifyContent:'center', background:'#0011ff10' },
+    cardAppName: {
+      margin:'12px auto', maxWidth:360, background:'#fff', borderRadius:16,
+      padding:12, boxShadow:'0 6px 18px rgba(0,0,0,0.06)', border:'1px solid #e6e6e6', textAlign:'center'
+    },
+    topGrid: { display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:12, alignItems:'center', marginBottom:12 },
+    slimBox: { minWidth:92, background:'#fff', borderRadius:12, padding:'8px 10px', border:'1px solid #e5e7eb', boxShadow:'0 1px 3px rgba(0,0,0,0.03)' },
+    avatarCircle: { height:64, width:64, borderRadius:999, background:'#4f46e5', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800, fontSize:18, boxShadow:'0 6px 18px rgba(79,70,229,0.14)' },
+    playBtn: { background:'#4f46e5', color:'#fff', border:'none', padding:'10px 18px', borderRadius:10, fontWeight:800, fontSize:16, cursor:'pointer' },
+    smallBtn: { background:'#fff', border:'1px solid #e5e7eb', padding:'8px 12px', borderRadius:8, cursor:'pointer' },
+    boardGap: { marginTop:12 },
+    cellBase: {
+      height:56, borderRadius:12, border:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:800, userSelect:'none', transition:'background 160ms, color 120ms'
+    }
+  };
+
   return (
-    <div className="container" style={{padding:16, display:'flex', justifyContent:'center'}}>
+    <div style={styles.container}>
       <div style={{width:'100%', maxWidth:420}}>
         {/* App name box */}
-        <div style={{
-          margin:'12px auto',
-          maxWidth:320,
-          background:'#fff',
-          borderRadius:16,
-          padding:12,
-          boxShadow:'0 4px 12px rgba(0,0,0,0.06)',
-          border:'1px solid #e6e6e6',
-          textAlign:'center'
-        }}>
-          <h1 style={{margin:0, fontSize:22, fontWeight:800, color:'#111827'}}>WordGrid</h1>
+        <div style={styles.cardAppName}>
+          <h1 style={{margin:0, fontSize:22, fontWeight:800, color:'#0b1220'}}>WordGrid</h1>
         </div>
 
-        {/* Top row: Timer | Avatar+username | Back */}
-        <div style={{display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:12, alignItems:'center', marginBottom:12}}>
+        {/* Top row: Timer | Avatar+username | Next */}
+        <div style={styles.topGrid}>
           {/* Timer (left slim) */}
           <div style={{display:'flex', justifyContent:'flex-start'}}>
-            <div style={{
-              minWidth:92,
-              background:'#fff',
-              borderRadius:12,
-              padding:'8px 10px',
-              border:'1px solid #e5e7eb',
-              boxShadow:'0 1px 3px rgba(0,0,0,0.03)'
-            }}>
+            <div style={styles.slimBox}>
               <div style={{fontSize:11, color:'#6b7280'}}>Timer</div>
-              <div style={{fontSize:16, fontWeight:700}}>{running ? elapsed.toFixed(3)+' s' : (finished ? elapsed.toFixed(3)+' s' : '0.000 s')}</div>
+              <div style={{fontSize:16, fontWeight:700, color:'#111827'}}>
+                { running ? elapsed.toFixed(3)+' s' : (finished ? elapsed.toFixed(3)+' s' : '0.000 s') }
+              </div>
             </div>
           </div>
 
           {/* Avatar center */}
           <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
-            <div style={{
-              height:64, width:64, borderRadius:999, background:'#4f46e5',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              color:'#fff', fontWeight:800, fontSize:18, boxShadow:'0 6px 18px rgba(79,70,229,0.14)'
-            }}>
-              {initials}
+            <div style={styles.avatarCircle}>
+              {initials || '@'}
             </div>
             <div style={{marginTop:6, fontSize:12, color:'#374151'}}>{user}</div>
+
+            {/* Play button below avatar */}
+            {!running && !finished && !countdown && (
+              <div style={{marginTop:10, display:'flex', flexDirection:'column', alignItems:'center', gap:8}}>
+                <button onClick={handleStart} style={styles.playBtn}>Play</button>
+                <div>
+                  <Link href="/leaderboard"><button style={styles.smallBtn}>Leaderboard</button></Link>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Back (right slim) */}
+          {/* Next (right slim) */}
           <div style={{display:'flex', justifyContent:'flex-end'}}>
-            <div style={{
-              minWidth:92,
-              display:'flex', justifyContent:'flex-end',
-              background:'#fff', borderRadius:12, padding:'8px 10px',
-              border:'1px solid #e5e7eb', boxShadow:'0 1px 3px rgba(0,0,0,0.03)'
-            }}>
-              <Link href="/">
-                <button style={{
-                  background:'#ef4444', color:'#fff', border:'none', padding:'6px 10px',
-                  borderRadius:8, fontWeight:700, cursor:'pointer'
-                }}>
-                  Back
-                </button>
-              </Link>
+            <div style={styles.slimBox}>
+              <div style={{fontSize:11, color:'#6b7280'}}>Next</div>
+              <div style={{fontSize:20, fontWeight:800, color:'#0b1220'}}>{nextLetter || '—'}</div>
             </div>
           </div>
         </div>
@@ -221,35 +207,18 @@ export default function GameScreen(){
           </div>
         )}
 
-        {/* Play / Leaderboard area (shown when not running and not finished and not in countdown) */}
-        {!running && !finished && !countdown && (
-          <div style={{textAlign:'center', marginTop:8}}>
-            <button onClick={handleStart} style={{
-              background:'#4f46e5', color:'#fff', border:'none', padding:'10px 18px',
-              borderRadius:10, fontWeight:800, fontSize:16, cursor:'pointer'
-            }}>
-              Play
-            </button>
-            <div style={{marginTop:10}}>
-              <Link href="/leaderboard"><button style={{
-                background:'#fff', border:'1px solid #e5e7eb', padding:'8px 12px', borderRadius:8, cursor:'pointer'
-              }}>Leaderboard</button></Link>
-            </div>
-          </div>
-        )}
-
-        {/* Current Next indicator */}
+        {/* Next indicator (redundant but safe) */}
         <div style={{textAlign:'center', marginTop:12}}>
           <h3 style={{margin:0, fontSize:16}}>Next: <span style={{fontWeight:800}}>{nextLetter || '—'}</span></h3>
         </div>
 
         {/* Board: 7 rows x 4 cols */}
-        <div style={{marginTop:12}}>
+        <div style={styles.boardGap}>
           { makeGridFromShuffled(shuffled).map((row, rIdx) => (
             <div key={rIdx} style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:10}}>
               {row.map((cell, cIdx) => {
                 const isLastRow = rIdx === 6;
-                // last row: cells 0 & 1 normal, cells 2+3 -> Back button spanning 2 cols (we render at cIdx===3)
+                // last row: cells 0 & 1 normal, cells 2+3 -> Back button spanning 2 cols (render at cIdx===3)
                 if(isLastRow && cIdx === 2) return null;
                 if(isLastRow && cIdx === 3){
                   return (
@@ -260,8 +229,9 @@ export default function GameScreen(){
                         background:'#fee2e2',
                         border:'1px solid #fecaca',
                         width:'100%',
-                        fontWeight:700,
-                        color:'#b91c1c'
+                        fontWeight:800,
+                        color:'#b91c1c',
+                        cursor:'pointer'
                       }}>← Back</button></Link>
                     </div>
                   );
@@ -272,27 +242,23 @@ export default function GameScreen(){
                 const isWrong = letter && wrongLetters.includes(letter);
                 const isDisabled = !letter || isClicked;
 
-                const baseStyle = {
-                  height:56,
-                  borderRadius:12,
-                  border:'1px solid #e5e7eb',
-                  display:'flex',
-                  alignItems:'center',
-                  justifyContent:'center',
-                  fontSize:18,
-                  fontWeight:800,
-                  userSelect:'none',
-                  cursor: letter && !isDisabled ? 'pointer' : 'default',
-                  transition:'background 180ms, transform 120ms',
-                  background: '#f8fafc',
-                  color:'#111827'
-                };
-
+                // determine background + text color
+                let background = '#f8fafc'; // default very light
+                let color = '#0b1220'; // default dark text
                 if(isClicked){
-                  baseStyle.background = '#d1fae5'; // light green
+                  background = '#10b981'; // teal/green
+                  color = '#ffffff';
                 } else if(isWrong){
-                  baseStyle.background = '#fee2e2'; // light red flash
+                  background = '#fb7185'; // rose-400
+                  color = '#ffffff';
                 }
+
+                const baseStyle = {
+                  ...styles.cellBase,
+                  background,
+                  color,
+                  cursor: letter && !isDisabled ? 'pointer' : 'default'
+                };
 
                 return (
                   <div
@@ -320,7 +286,6 @@ export default function GameScreen(){
             submitted={submitted}
           />
         )}
-
       </div>
     </div>
   );

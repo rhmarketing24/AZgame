@@ -1,14 +1,14 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Countdown from './Countdown';
 import FinishScreen from './FinishScreen';
 import Link from 'next/link';
 
 const ALPH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-export default function GameScreen(){
+export default function GameScreen() {
   const [user, setUser] = useState('@anonymous');
-  const [nextIndex, setNextIndex] = useState(0); // 0 => 'A'
+  const [nextIndex, setNextIndex] = useState(0);
   const [shuffled, setShuffled] = useState([]);
   const [running, setRunning] = useState(false);
   const [startTime, setStartTime] = useState(null);
@@ -17,15 +17,14 @@ export default function GameScreen(){
   const [submitted, setSubmitted] = useState(false);
   const [countdown, setCountdown] = useState(false);
 
-  // UI state for marking clicked/disabled letters and wrong flashes
-  const [clickedLetters, setClickedLetters] = useState([]); // letters that were clicked correctly
-  const [wrongLetters, setWrongLetters] = useState([]); // letters currently flashing wrong
+  const [clickedLetters, setClickedLetters] = useState([]); // correct clicked
+  const [wrongLetters, setWrongLetters] = useState([]); // temporary wrong flash
 
   const intervalRef = useRef(null);
 
-  useEffect(()=> {
+  useEffect(() => {
+    // initial shuffle & reset
     setShuffled(shuffle(ALPH));
-    // reset
     setNextIndex(0);
     setRunning(false);
     setStartTime(null);
@@ -34,28 +33,34 @@ export default function GameScreen(){
     setSubmitted(false);
     setClickedLetters([]);
     setWrongLetters([]);
-  },[]);
+  }, []);
 
-  useEffect(()=> {
-    if(running){
-      if(intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(()=> {
-        setElapsed((Date.now() - startTime)/1000);
+  useEffect(() => {
+    if (running) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        setElapsed((Date.now() - startTime) / 1000);
       }, 100);
     } else {
-      if(intervalRef.current){ clearInterval(intervalRef.current); intervalRef.current = null; }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
-    return ()=> {
-      if(intervalRef.current){ clearInterval(intervalRef.current); intervalRef.current = null; }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     };
-  },[running,startTime]);
+  }, [running, startTime]);
 
   const nextLetter = ALPH[nextIndex] || null;
 
-  function handleStart(){
+  function handleStart() {
     setCountdown(true);
   }
-  function onCountdownFinish(){
+  function onCountdownFinish() {
     setCountdown(false);
     setRunning(true);
     setStartTime(Date.now());
@@ -68,47 +73,48 @@ export default function GameScreen(){
     setShuffled(shuffle(ALPH));
   }
 
-  function clickLetter(letter){
-    if(!running) return;
-    if(finished) return;
-    if(!letter) return; // empty slot
-    if(clickedLetters.includes(letter)) return; // already clicked correct
+  function clickLetter(letter) {
+    if (!running) return;
+    if (finished) return;
+    if (!letter) return;
+    if (clickedLetters.includes(letter)) return;
 
-    if(letter === nextLetter){
-      // correct
-      setClickedLetters(prev => [...prev, letter]);
-      setNextIndex(i => {
+    if (letter === nextLetter) {
+      setClickedLetters((prev) => [...prev, letter]);
+      setNextIndex((i) => {
         const ni = i + 1;
-        if(ni >= ALPH.length){
+        if (ni >= ALPH.length) {
           setRunning(false);
           setFinished(true);
-          setElapsed((Date.now() - startTime)/1000);
+          setElapsed((Date.now() - startTime) / 1000);
         }
         return ni;
       });
     } else {
-      // wrong flash (state-driven)
-      setWrongLetters(prev => (prev.includes(letter) ? prev : [...prev, letter]));
-      setTimeout(()=> {
-        setWrongLetters(prev => prev.filter(x => x !== letter));
-      }, 450);
+      if (!wrongLetters.includes(letter)) {
+        setWrongLetters((prev) => [...prev, letter]);
+        setTimeout(() => {
+          setWrongLetters((prev) => prev.filter((x) => x !== letter));
+        }, 450);
+      }
     }
   }
 
-  async function submitScore(){
-    try{
+  async function submitScore() {
+    try {
       const time = elapsed;
       await fetch('/api/saveScore', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ username: user, time })
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: user, time }),
       });
       setSubmitted(true);
-    }catch(e){
+    } catch (e) {
       console.error(e);
     }
   }
 
-  function retry(){
+  function retry() {
     setShuffled(shuffle(ALPH));
     setNextIndex(0);
     setRunning(false);
@@ -121,164 +127,151 @@ export default function GameScreen(){
     setCountdown(false);
   }
 
-  // 7x4 grid builder (pads to 28)
-  function makeGridFromShuffled(arr){
+  // build 7x4 rows array (pad to 28)
+  function makeRowsFromShuffled(arr) {
     const items = [...arr];
-    while(items.length < 28) items.push('');
+    while (items.length < 28) items.push('');
     const rows = [];
-    for(let i=0;i<7;i++){
-      rows.push(items.slice(i*4, i*4 + 4));
-    }
+    for (let r = 0; r < 7; r++) rows.push(items.slice(r * 4, r * 4 + 4));
     return rows;
   }
 
-  // initials for avatar
-  const initials = (user || '@').split(' ').map(s=>s[0]||'').slice(0,2).join('').toUpperCase();
-
-  // Styles inline to keep single-file easy to drop in; change to classes if you prefer
-  const styles = {
-    container: { padding:16, display:'flex', justifyContent:'center', background:'#0011ff10' },
-    cardAppName: {
-      margin:'12px auto', maxWidth:360, background:'#fff', borderRadius:16,
-      padding:12, boxShadow:'0 6px 18px rgba(0,0,0,0.06)', border:'1px solid #e6e6e6', textAlign:'center'
-    },
-    topGrid: { display:'grid', gridTemplateColumns:'1fr auto 1fr', gap:12, alignItems:'center', marginBottom:12 },
-    slimBox: { minWidth:92, background:'#fff', borderRadius:12, padding:'8px 10px', border:'1px solid #e5e7eb', boxShadow:'0 1px 3px rgba(0,0,0,0.03)' },
-    avatarCircle: { height:64, width:64, borderRadius:999, background:'#4f46e5', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:800, fontSize:18, boxShadow:'0 6px 18px rgba(79,70,229,0.14)' },
-    playBtn: { background:'#4f46e5', color:'#fff', border:'none', padding:'10px 18px', borderRadius:10, fontWeight:800, fontSize:16, cursor:'pointer' },
-    smallBtn: { background:'#fff', border:'1px solid #e5e7eb', padding:'8px 12px', borderRadius:8, cursor:'pointer' },
-    boardGap: { marginTop:12 },
-    cellBase: {
-      height:56, borderRadius:12, border:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:800, userSelect:'none', transition:'background 160ms, color 120ms'
-    }
-  };
+  const initials = (user || '@').split(' ').map((s) => s[0] || '').slice(0, 2).join('').toUpperCase();
 
   return (
-    <div style={styles.container}>
-      <div style={{width:'100%', maxWidth:420}}>
-        {/* App name box */}
-        <div style={styles.cardAppName}>
-          <h1 style={{margin:0, fontSize:22, fontWeight:800, color:'#0b1220'}}>WordGrid</h1>
-        </div>
+    <div className="min-h-screen flex items-start justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md">
+        {/* App name in a box */}
+        <header className="pt-6 pb-4">
+          <div className="mx-auto w-full max-w-xs bg-white rounded-2xl shadow-md border border-gray-200 px-4 py-3">
+            <h1 className="text-center text-2xl sm:text-3xl font-extrabold text-gray-900">WordGrid</h1>
+          </div>
+        </header>
 
-        {/* Top row: Timer | Avatar+username | Next */}
-        <div style={styles.topGrid}>
-          {/* Timer (left slim) */}
-          <div style={{display:'flex', justifyContent:'flex-start'}}>
-            <div style={styles.slimBox}>
-              <div style={{fontSize:11, color:'#6b7280'}}>Timer</div>
-              <div style={{fontSize:16, fontWeight:700, color:'#111827'}}>
-                { running ? elapsed.toFixed(3)+' s' : (finished ? elapsed.toFixed(3)+' s' : '0.000 s') }
+        {/* top row: timer | avatar+username+play | next */}
+        <div className="grid grid-cols-3 gap-3 mb-4 px-1 items-center">
+          {/* Timer (slim) */}
+          <div className="flex items-center justify-center">
+            <div className="w-full bg-white rounded-2xl p-2 py-2 flex flex-col items-start shadow-sm border border-gray-200">
+              <div className="text-xs text-gray-500">Timer</div>
+              <div className="text-sm font-semibold text-gray-900">
+                {running ? elapsed.toFixed(3) + ' s' : finished ? elapsed.toFixed(3) + ' s' : '0.000 s'}
               </div>
             </div>
           </div>
 
-          {/* Avatar center */}
-          <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
-            <div style={styles.avatarCircle}>
-              {initials || '@'}
+          {/* center: avatar + username + play/leaderboard */}
+          <div className="flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center">
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-md">
+                {initials || '@'}
+              </div>
+              <div className="mt-2 text-xs text-gray-600">{user}</div>
             </div>
-            <div style={{marginTop:6, fontSize:12, color:'#374151'}}>{user}</div>
 
-            {/* Play button below avatar */}
+            {/* Play + leaderboard shown when not running/finished */}
             {!running && !finished && !countdown && (
-              <div style={{marginTop:10, display:'flex', flexDirection:'column', alignItems:'center', gap:8}}>
-                <button onClick={handleStart} style={styles.playBtn}>Play</button>
-                <div>
-                  <Link href="/leaderboard"><button style={styles.smallBtn}>Leaderboard</button></Link>
-                </div>
+              <div className="mt-3 flex flex-col items-center gap-2">
+                <button onClick={handleStart} className="px-5 py-2 rounded-lg bg-indigo-600 text-white font-semibold shadow">
+                  Play
+                </button>
+                <Link href="/leaderboard">
+                  <a className="mt-1 px-3 py-1 rounded-md bg-white border border-gray-200 text-sm text-gray-700 shadow-sm">Leaderboard</a>
+                </Link>
               </div>
             )}
           </div>
 
-          {/* Next (right slim) */}
-          <div style={{display:'flex', justifyContent:'flex-end'}}>
-            <div style={styles.slimBox}>
-              <div style={{fontSize:11, color:'#6b7280'}}>Next</div>
-              <div style={{fontSize:20, fontWeight:800, color:'#0b1220'}}>{nextLetter || '—'}</div>
+          {/* Next (slim) */}
+          <div className="flex items-center justify-center">
+            <div className="w-full bg-white rounded-2xl p-2 py-2 flex items-center justify-end shadow-sm border border-gray-200">
+              <div className="text-right">
+                <div className="text-xs text-gray-500">Next</div>
+                <div className="text-lg font-extrabold text-gray-900">{nextLetter || '—'}</div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Countdown */}
         {countdown && (
-          <div style={{display:'flex', justifyContent:'center', marginTop:8}}>
+          <div className="flex justify-center mb-3">
             <Countdown start={3} onFinish={onCountdownFinish} />
           </div>
         )}
 
-        {/* Board: 7 rows x 4 cols */}
-        <div style={styles.boardGap}>
-          { makeGridFromShuffled(shuffled).map((row, rIdx) => (
-            <div key={rIdx} style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:10}}>
-              {row.map((cell, cIdx) => {
-                const isLastRow = rIdx === 6;
-                // last row: render Back at cIdx === 2 (span 2 columns), skip cIdx === 3
-                if(isLastRow && cIdx === 3) return null;
-                if(isLastRow && cIdx === 2){
+        {/* Letter Box (Tailwind layout like MobileAppUI) */}
+        <section role="grid" aria-label="Letter box" className="bg-white rounded-2xl p-3 shadow-md">
+          <div className="space-y-3">
+            {makeRowsFromShuffled(shuffled).map((row, rIdx) => (
+              <div key={rIdx} role="row" className="grid grid-cols-4 gap-3">
+                {row.map((cell, cIdx) => {
+                  const isLastRow = rIdx === 6;
+                  const isSecondCellOfBackGroup = isLastRow && cIdx === 2;
+
+                  // If second cell of back group, we skip (back will be rendered at cIdx === 3)
+                  if (isSecondCellOfBackGroup) return null;
+
+                  // Render Back as a button occupying two cells on the last row (render when cIdx===3)
+                  if (isLastRow && cIdx === 3) {
+                    return (
+                      <button
+                        key={`back-${rIdx}`}
+                        onClick={() => (window.location.href = '/')}
+                        role="button"
+                        aria-label="Back"
+                        className="col-span-2 flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-100 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        <span className="text-sm font-medium text-red-700">Back</span>
+                      </button>
+                    );
+                  }
+
+                  const letter = cell;
+                  const isClicked = letter && clickedLetters.includes(letter);
+                  const isWrong = letter && wrongLetters.includes(letter);
+                  const isDisabled = !letter || isClicked;
+
+                  // classes for states
+                  const baseClasses = 'h-14 sm:h-16 flex items-center justify-center rounded-lg border select-none touch-manipulation text-lg sm:text-xl font-semibold';
+                  const defaultBg = 'bg-gray-50 border-gray-200 text-gray-900';
+                  const clickedBg = 'bg-emerald-500 border-emerald-600 text-white';
+                  const wrongBg = 'bg-rose-400 border-rose-500 text-white';
+                  const classes = `${baseClasses} ${isClicked ? clickedBg : isWrong ? wrongBg : defaultBg}`;
+
                   return (
-                    <div key={'back-'+rIdx} style={{gridColumn:'span 2', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                      <Link href="/"><button style={{
-                        padding:'14px 12px',
-                        borderRadius:12,
-                        background:'#fee2e2',
-                        border:'1px solid #fecaca',
-                        width:'100%',
-                        fontWeight:800,
-                        fontSize:16,
-                        color:'#b91c1c',
-                        cursor:'pointer'
-                      }}>← Back</button></Link>
+                    <div
+                      key={`cell-${rIdx}-${cIdx}`}
+                      role="gridcell"
+                      id={letter ? `l-${letter}` : `empty-${rIdx}-${cIdx}`}
+                      onClick={() => clickLetter(letter)}
+                      aria-label={letter ? `Letter ${letter}` : 'Empty letter cell'}
+                      aria-disabled={isDisabled}
+                      className={classes}
+                      style={{ cursor: letter && !isDisabled ? 'pointer' : 'default' }}
+                    >
+                      {letter || ''}
                     </div>
                   );
-                }
+                })}
+              </div>
+            ))}
+          </div>
+        </section>
 
-                const letter = cell;
-                const isClicked = letter && clickedLetters.includes(letter);
-                const isWrong = letter && wrongLetters.includes(letter);
-                const isDisabled = !letter || isClicked;
+        {/* footer helper */}
+        <div className="mt-5 text-center text-xs text-gray-500">Tap letters to select. Use Back to undo.</div>
 
-                // determine background + text color
-                let background = '#f8fafc'; // default very light
-                let color = '#0b1220'; // default dark text
-                if(isClicked){
-                  background = '#10b981'; // green
-                  color = '#ffffff';
-                } else if(isWrong){
-                  background = '#fb7185'; // red
-                  color = '#ffffff';
-                }
-
-                const baseStyle = {
-                  ...styles.cellBase,
-                  background,
-                  color,
-                  cursor: letter && !isDisabled ? 'pointer' : 'default'
-                };
-
-                return (
-                  <div
-                    key={cIdx}
-                    id={letter ? 'l-'+letter : `empty-${rIdx}-${cIdx}`}
-                    onClick={()=> clickLetter(letter)}
-                    style={baseStyle}
-                    aria-disabled={isDisabled}
-                  >
-                    {letter || ''}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        {/* Finish screen */}
+        {/* FinishScreen */}
         {finished && (
           <FinishScreen
             time={elapsed}
             onSubmit={submitScore}
             onRetry={retry}
-            onBack={()=> { location.href = '/'; }}
+            onBack={() => (window.location.href = '/')}
             submitted={submitted}
           />
         )}
@@ -287,12 +280,12 @@ export default function GameScreen(){
   );
 }
 
-/* Helpers: shuffle */
-function shuffle(arr){
+/* Helpers */
+function shuffle(arr) {
   const a = [...arr];
-  for(let i=a.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
 }

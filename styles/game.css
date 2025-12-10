@@ -1,0 +1,13 @@
+.container {min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px;}
+h1{font-size:44px;margin:8px 0;text-align:center}
+.controls{display:flex;gap:12px;align-items:center;justify-content:center;margin:12px 0}
+.card{background:rgba(255,255,255,0.08);padding:18px;border-radius:12px;min-width:120px;text-align:center}
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;max-width:420px;margin:18px auto}
+.letter{width:72px;height:72px;border-radius:14px;background:#fff;color:#0000FF;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 6px 12px rgba(0,0,0,0.12);cursor:pointer}
+.letter.correct{background:#b8f5d1}
+.letter.wrong{background:#f5b8b8}
+.top-row{display:flex;gap:12px;align-items:center;justify-content:center;margin-bottom:8px}
+.preview{display:flex;gap:8px;padding:8px;border-radius:10px;background:rgba(255,255,255,0.05)}
+.btn{padding:10px 20px;border-radius:999px;background:#fff;color:#0000FF;font-weight:700;border:none;cursor:pointer}
+.small-btn{padding:8px 12px;border-radius:8px;background:#fff;border:2px solid rgba(0,0,0,0.15);cursor:pointer}
+.center{display:flex;justify-content:center;align-items:center;flex-direction:column}

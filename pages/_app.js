@@ -4,36 +4,52 @@ import "../styles/globals.css";
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
-    console.log("MiniApp: _app mounted");
+    // ফোকাসেড origins — প্রথমে base.dev, পরে base.build; প্রয়োজন হলে আরো যোগ করো
+    const ORIGINS = [
+      "https://base.dev",
+      "https://base.build",
+      "https://preview.base.build" // (optional)
+    ];
 
-    const BASE_ORIGIN = "https://base.build"; // <-- prefer this (Base production)
-    // alternatively try "https://base.dev" if preview uses that domain
+    const msg = { type: "miniapp.ready", version: 1 };
 
-    const sendReady = (origin = BASE_ORIGIN) => {
-      const msg = { type: "miniapp.ready", version: 1 };
-      try {
-        console.log("[miniapp.ready] sending ->", msg, "to", origin);
-        window?.parent?.postMessage(msg, origin);
-      } catch (e) {
-        console.warn("postMessage failed", e);
-        // fallback: try wildcard (only if needed)
-        try { window?.parent?.postMessage(msg, "*"); } catch (e2) { /* ignore */ }
+    // try to send to each origin (prefer explicit)
+    const sendAll = (useWildcard = false) => {
+      ORIGINS.forEach((o) => {
+        try {
+          window?.parent?.postMessage(msg, o);
+          console.log("[miniapp.ready] sent ->", o, msg);
+        } catch (e) {
+          console.warn("postMessage ->", o, "failed", e);
+        }
+      });
+      if (useWildcard) {
+        try {
+          window?.parent?.postMessage(msg, "*");
+          console.log("[miniapp.ready] sent -> wildcard", msg);
+        } catch (e) { console.warn("wildcard failed", e); }
       }
     };
 
-    // send immediately + a couple retries (fix race/timing)
-    sendReady();
-    const t1 = setTimeout(() => sendReady(), 500);
-    const t2 = setTimeout(() => sendReady(), 1500);
+    // immediate + retries
+    sendAll();
+    const t1 = setTimeout(() => sendAll(), 400);
+    const t2 = setTimeout(() => sendAll(true), 1200); // last try with wildcard
 
-    // also send again when tab becomes visible (user focused preview)
-    const handleVisibility = () => { if (!document.hidden) sendReady(); };
-    document.addEventListener("visibilitychange", handleVisibility);
+    // also send every 2s for a short period (helps race/timing)
+    let cnt = 0;
+    const interval = setInterval(() => {
+      if (cnt++ > 6) { clearInterval(interval); return; }
+      sendAll();
+    }, 2000);
+
+    // send again when page becomes visible
+    const onVis = () => { if (!document.hidden) sendAll(); };
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      document.removeEventListener("visibilitychange", handleVisibility);
+      clearTimeout(t1); clearTimeout(t2); clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 

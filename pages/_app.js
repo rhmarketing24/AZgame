@@ -1,26 +1,33 @@
 // pages/_app.js
-import { useEffect } from 'react';
-import '../styles/globals.css';
+import { useEffect } from "react";
+import "../styles/globals.css";
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
     console.log("MiniApp: _app mounted");
 
-    const sendReady = () => {
+    const BASE_ORIGIN = "https://base.build"; // <-- prefer this (Base production)
+    // alternatively try "https://base.dev" if preview uses that domain
+
+    const sendReady = (origin = BASE_ORIGIN) => {
       const msg = { type: "miniapp.ready", version: 1 };
-      console.log("[miniapp.ready] sending ->", msg);
-      window?.parent?.postMessage(msg, "*");
+      try {
+        console.log("[miniapp.ready] sending ->", msg, "to", origin);
+        window?.parent?.postMessage(msg, origin);
+      } catch (e) {
+        console.warn("postMessage failed", e);
+        // fallback: try wildcard (only if needed)
+        try { window?.parent?.postMessage(msg, "*"); } catch (e2) { /* ignore */ }
+      }
     };
 
-    // Send immediately + retries (timing fix for Base preview)
+    // send immediately + a couple retries (fix race/timing)
     sendReady();
-    const t1 = setTimeout(sendReady, 500);
-    const t2 = setTimeout(sendReady, 1500);
+    const t1 = setTimeout(() => sendReady(), 500);
+    const t2 = setTimeout(() => sendReady(), 1500);
 
-    // When user focuses preview window again
-    const handleVisibility = () => {
-      if (!document.hidden) sendReady();
-    };
+    // also send again when tab becomes visible (user focused preview)
+    const handleVisibility = () => { if (!document.hidden) sendReady(); };
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {

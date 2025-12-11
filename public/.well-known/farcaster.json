@@ -7,8 +7,11 @@
     "splashImageUrl": "https://a-zgame.vercel.app/splash.png",
     "splashBackgroundColor": "#0000FF",
     "heroImageUrl": "https://a-zgame.vercel.app/hero.png",
-    "tagline": "Tap A→Z fast — beat the clock."
+    "tagline": "Tap A→Z fast — beat the clock.",
+    "primaryCategory": "games",
+    "tags": ["abcgame", "speedrun", "tapaz", "puzzle", "challenge"]
   },
+
   "accountAssociation": {
     "header": "eyJmaWQiOjI5NTY4MCwidHlwZSI6ImF1dGgiLCJrZXkiOiIweDdFNTdiNWQ0MmEzN2NDMzMyQ2M1NDcxMmRiOTc3RjQzQmFmMmZmMjgifQ",
     "payload": "eyJkb21haW4iOiJhLXpnYW1lLnZlcmNlbC5hcHAifQ",

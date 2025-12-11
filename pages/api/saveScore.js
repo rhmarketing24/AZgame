@@ -1,28 +1,30 @@
 // pages/api/saveScore.js
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY // server-only secret
 );
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { username, time, letters_completed } = req.body;
+    // expect body: { username, score_seconds, letters_completed }
+    const { username, score_seconds, letters_completed } = req.body;
 
-    // validate time (coerce to number)
-    const score_seconds = Number(time);
-    if (!username || Number.isNaN(score_seconds)) {
-      return res.status(400).json({ error: 'Missing or invalid fields' });
-    }
+    // validate
+    if (typeof score_seconds !== "number")
+      return res.status(400).json({ error: "Missing or invalid score_seconds" });
+    if (typeof letters_completed !== "number")
+      return res.status(400).json({ error: "Missing or invalid letters_completed" });
 
-    const lettersCompleted = Number(letters_completed ?? 26); // default 26 if not provided
+    const safeUsername = username && username.trim() ? username.trim() : "anonymous";
 
     const { error } = await admin
-      .from('leaderboard')
-      .insert([{ username, score_seconds, letters_completed: lettersCompleted }]);
+      .from("leaderboard") // table name as you have in Supabase
+      .insert([{ username: safeUsername, score_seconds, letters_completed }]);
 
     if (error) return res.status(500).json({ error: error.message });
 

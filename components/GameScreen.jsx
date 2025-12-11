@@ -95,16 +95,38 @@ export default function GameScreen(){
     }
   }
 
+  // Updated submitScore: send score_seconds, letters_completed, safe username
   async function submitScore(){
+    if(submitted) return; // prevent double submit
     try{
-      const time = elapsed;
-      await fetch('/api/saveScore', {
-        method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ username: user, time })
+      // sanitize username (remove leading @ if present)
+      const safeName = (user || '').replace(/^@+/, '').trim() || 'anonymous';
+
+      // letters_completed should be the number of letters the player completed.
+      // nextIndex increments after each correct click, so it equals completed count.
+      const letters_completed = Math.min(nextIndex, ALPH.length);
+
+      // score in seconds (float)
+      const score_seconds = typeof elapsed === 'number' ? elapsed : 0;
+
+      const res = await fetch('/api/saveScore', {
+        method:'POST',
+        headers:{ 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: safeName, score_seconds, letters_completed })
       });
+
+      if(!res.ok){
+        const err = await res.json().catch(()=>({ error: 'unknown' }));
+        console.error('saveScore failed', err);
+        // still mark submitted to avoid duplicates; remove this if you want to allow retry
+        setSubmitted(true);
+        return;
+      }
+
       setSubmitted(true);
     }catch(e){
-      console.error(e);
+      console.error('submitScore error', e);
+      // optionally setSubmitted(false) to allow retry on error
     }
   }
 

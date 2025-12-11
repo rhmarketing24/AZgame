@@ -1,0 +1,12 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "ABC Rush",
+    "iconUrl": "https://a-zgame.vercel.app/icon.png",
+    "homeUrl": "https://a-zgame.vercel.app",
+    "splashImageUrl": "https://a-zgame.vercel.app/splash.png",
+    "splashBackgroundColor": "#0000FF",
+    "heroImageUrl": "https://a-zgame.vercel.app/hero.png",
+    "tagline": "Tap A→Z fast, beat the clock."
+  }
+}

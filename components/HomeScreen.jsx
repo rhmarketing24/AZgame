@@ -3,9 +3,16 @@ import Link from 'next/link';
 
 export default function HomeScreen(){
 
-  // 🔥 Base Mini App Console Ready করার জন্য log
   useEffect(() => {
     console.log("Mini App Loaded: HomeScreen is active");
+
+    // 🔥 Base Preview Console Ready Signal
+    if (typeof window !== "undefined") {
+      window.parent?.postMessage(
+        { type: "miniapp.ready", version: 1 },
+        "*"
+      );
+    }
   }, []);
 
   return (

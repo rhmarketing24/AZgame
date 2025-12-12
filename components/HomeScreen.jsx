@@ -18,7 +18,7 @@ export default function HomeScreen(){
 
   return (
     <div className="container center">
-      <h1>Tap A → Z Rush</h1>
+      <h1>ABC Rush</h1>
       <p>Not connected (playing as anonymous)</p>
       <div style={{marginTop:12}}>
         <Link href="/game"><button className="btn">Play</button></Link>

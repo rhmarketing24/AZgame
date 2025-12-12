@@ -13,61 +13,59 @@ export default function App({ Component, pageProps }) {
 
     const readyMsg = { type: 'miniapp.ready', version: 1 };
 
-    const sendTo = (origin) => {
+    const sendTo = (target) => {
       try {
-        window.parent.postMessage(readyMsg, origin);
-        console.log('[miniapp.ready] sent ->', origin, readyMsg);
+        window.parent.postMessage(readyMsg, target);
+        console.log('[miniapp.ready] sent ->', target, readyMsg);
       } catch (e) {
-        console.warn('[miniapp.ready] postMessage failed ->', origin, e);
+        console.warn('[miniapp.ready] postMessage failed ->', target, e);
       }
     };
 
-    const sendAll = (useWildcard = false) => {
-      ORIGINS.forEach(sendTo);
-      if (useWildcard) {
-        try {
-          window.parent.postMessage(readyMsg, '*');
-          console.log('[miniapp.ready] sent -> wildcard', readyMsg);
-        } catch (e) { console.warn('wildcard failed', e); }
+    // try direct using document.referrer origin (if present)
+    let refOrigin = null;
+    try {
+      if (document.referrer) {
+        const u = new URL(document.referrer);
+        refOrigin = u.origin;
       }
-    };
+    } catch (e) {
+      refOrigin = null;
+    }
 
-    // immediate + retries
-    sendAll();
-    const t1 = setTimeout(() => sendAll(), 500);
-    const t2 = setTimeout(() => sendAll(true), 1200);
+    // send explicitly to referrer origin first (best)
+    if (refOrigin) sendTo(refOrigin);
 
-    // repeated few times for race conditions
+    // then try our known origins
+    ORIGINS.forEach(o => sendTo(o));
+
+    // then wildcard fallback after a bit
+    setTimeout(() => sendTo('*'), 800);
+
+    // repeated sends (timing / race)
     let tries = 0;
     const interval = setInterval(() => {
       if (tries++ > 8) { clearInterval(interval); return; }
-      sendAll();
-    }, 1500);
+      if (refOrigin) sendTo(refOrigin);
+      ORIGINS.forEach(o => sendTo(o));
+    }, 1000);
 
-    // when page becomes visible, re-send
-    const onVis = () => { if (!document.hidden) sendAll(); };
-    document.addEventListener('visibilitychange', onVis);
-
-    // listen to parent messages (show everything)
+    // listen for parent messages (debug)
     const onMessage = (ev) => {
-      console.log('[from-parent message]', { origin: ev.origin, data: ev.data });
-      // Debug: if parent sends an APPLY ready, echo a short ack (optional)
-      try {
-        const d = ev.data || {};
-        // parent uses type "APPLY" in some logs — show it clearly
-        if (d && d.type === 'APPLY' && Array.isArray(d.path) && d.path.includes('ready')) {
-          console.log('[HANDSHAKE] parent applied ready ->', d);
-          // optionally send a confirmation back (not required by Base, but harmless)
-          window.parent.postMessage({ type: 'miniapp.ready.ack', version: 1 }, '*');
-        }
-      } catch (e) { /* ignore */ }
+      console.log('[from-parent]', { origin: ev.origin, data: ev.data });
     };
     window.addEventListener('message', onMessage);
 
+    const onVis = () => { if (!document.hidden) {
+      if (refOrigin) sendTo(refOrigin);
+      ORIGINS.forEach(o => sendTo(o));
+    }};
+    document.addEventListener('visibilitychange', onVis);
+
     return () => {
-      clearTimeout(t1); clearTimeout(t2); clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(interval);
       window.removeEventListener('message', onMessage);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, []);
 

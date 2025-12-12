@@ -1,62 +1,28 @@
 // pages/_app.js
-import { useEffect } from 'react';
-import '../styles/globals.css';
+import { useEffect } from "react";
+import "../styles/globals.css";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
-    const ORIGINS = [
-      'https://base.dev',
-      'https://base.build',
-      'https://preview.base.build',
-      'https://base.app'
-    ];
+    let cancelled = false;
 
-    const readyMsg = { type: 'miniapp.ready', version: 1 };
-
-    const sendAll = (useWildcard = false) => {
-      ORIGINS.forEach((o) => {
-        try {
-          window?.parent?.postMessage(readyMsg, o);
-          console.log('[miniapp.ready] sent ->', o);
-        } catch (e) {
-          console.warn('[miniapp.ready] failed ->', o, e);
+    async function init() {
+      try {
+        // ✅ THIS is the ONLY correct ready call for Farcaster Mini Apps
+        await sdk.actions.ready();
+        if (!cancelled) {
+          console.log("[Farcaster MiniApp] ready called successfully");
         }
-      });
-
-      if (useWildcard) {
-        try {
-          window?.parent?.postMessage(readyMsg, '*');
-          console.log('[miniapp.ready] sent -> *');
-        } catch (e) {
-          console.warn('[miniapp.ready] wildcard failed', e);
-        }
+      } catch (err) {
+        console.error("[Farcaster MiniApp] ready failed", err);
       }
-    };
+    }
 
-    // send immediately + retries
-    sendAll();
-    const t1 = setTimeout(() => sendAll(), 400);
-    const t2 = setTimeout(() => sendAll(true), 1200);
-
-    let tries = 0;
-    const interval = setInterval(() => {
-      if (tries++ > 6) {
-        clearInterval(interval);
-        return;
-      }
-      sendAll();
-    }, 2000);
-
-    const onVis = () => {
-      if (!document.hidden) sendAll();
-    };
-    document.addEventListener('visibilitychange', onVis);
+    init();
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVis);
+      cancelled = true;
     };
   }, []);
 

@@ -8,11 +8,13 @@ const nextConfig = {
         source: "/(.*)",
         headers: [
           {
+            // ✅ Farcaster Mini App iframe allow
             key: "Content-Security-Policy",
             value:
-              "frame-ancestors https://base.dev https://base.build https://preview.base.build https://base.app 'self';",
+              "frame-ancestors https://miniapps.farcaster.xyz https://*.farcaster.xyz 'self';",
           },
           {
+            // ✅ required for iframe embedding
             key: "X-Frame-Options",
             value: "ALLOWALL",
           },

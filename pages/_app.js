@@ -50,16 +50,32 @@ export default function App({ Component, pageProps }) {
     document.addEventListener('visibilitychange', onVis);
 
     // ---- Debug: listen to messages from parent and log them so preview shows useful info
-    const onMessage = (ev) => {
+   // (pages/_app.js) ... inside useEffect after window.addEventListener('message', onMessage);
+const onMessage = (ev) => {
+  try {
+    console.log('[from-parent message]', { origin: ev.origin, data: ev.data });
+
+    // Simple heuristic: if parent sends APPLY/ready or similar, send ACK back
+    const d = ev.data || {};
+    const looksLikeReady = (
+      (d.type && String(d.type).toLowerCase().includes('ready')) ||
+      (Array.isArray(d.path) && d.path.includes('ready')) ||
+      (JSON.stringify(d).toLowerCase().includes('"ready"'))
+    );
+
+    if (looksLikeReady) {
+      // send a small ack back to parent (wildcard); Base may use it to finalize handshake UI
       try {
-        // optional: filter by known origins if you want
-        // if (!ORIGINS.includes(ev.origin) && ev.origin !== 'null') return;
-        console.log('[from-parent message]', { origin: ev.origin, data: ev.data });
-      } catch (e) {
-        console.warn('message parse error', e);
-      }
-    };
-    window.addEventListener('message', onMessage);
+        window.parent.postMessage({ type: 'miniapp.client_ack', version: 1, time: Date.now() }, '*');
+        console.log('[miniapp.client_ack] sent');
+      } catch (err) { console.warn('client_ack failed', err); }
+    }
+  } catch (e) {
+    console.warn('message parse error', e);
+  }
+};
+window.addEventListener('message', onMessage);
+
 
     return () => {
       clearTimeout(t1); clearTimeout(t2); clearInterval(interval);

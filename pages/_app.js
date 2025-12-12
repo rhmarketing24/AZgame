@@ -1,6 +1,6 @@
 // pages/_app.js
-import '../styles/globals.css';
 import { useEffect } from 'react';
+import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
@@ -10,45 +10,57 @@ export default function App({ Component, pageProps }) {
       'https://preview.base.build',
       'https://base.app'
     ];
+
     const readyMsg = { type: 'miniapp.ready', version: 1 };
 
+    const sendTo = (origin) => {
+      try {
+        window.parent.postMessage(readyMsg, origin);
+        console.log('[miniapp.ready] sent ->', origin, readyMsg);
+      } catch (e) {
+        console.warn('[miniapp.ready] postMessage failed ->', origin, e);
+      }
+    };
+
     const sendAll = (useWildcard = false) => {
-      ORIGINS.forEach(o => {
-        try { window.parent.postMessage(readyMsg, o); console.log('[miniapp.ready] ->', o); }
-        catch(e){ console.warn('postMessage ->', o, e); }
-      });
+      ORIGINS.forEach(sendTo);
       if (useWildcard) {
-        try { window.parent.postMessage(readyMsg, '*'); console.log('[miniapp.ready] -> wildcard'); }
-        catch(e){ console.warn('wildcard postMessage failed', e); }
+        try {
+          window.parent.postMessage(readyMsg, '*');
+          console.log('[miniapp.ready] sent -> wildcard', readyMsg);
+        } catch (e) { console.warn('wildcard failed', e); }
       }
     };
 
     // immediate + retries
     sendAll();
-    const t1 = setTimeout(() => sendAll(), 400);
+    const t1 = setTimeout(() => sendAll(), 500);
     const t2 = setTimeout(() => sendAll(true), 1200);
+
+    // repeated few times for race conditions
     let tries = 0;
     const interval = setInterval(() => {
       if (tries++ > 8) { clearInterval(interval); return; }
       sendAll();
-    }, 2000);
+    }, 1500);
 
+    // when page becomes visible, re-send
     const onVis = () => { if (!document.hidden) sendAll(); };
     document.addEventListener('visibilitychange', onVis);
 
-    // ---- verbose listener: log everything and reply back with ACK+echo
+    // listen to parent messages (show everything)
     const onMessage = (ev) => {
+      console.log('[from-parent message]', { origin: ev.origin, data: ev.data });
+      // Debug: if parent sends an APPLY ready, echo a short ack (optional)
       try {
-        console.log('[from-parent recv]', { origin: ev.origin, data: ev.data });
-        // send an explicit ack + echo of received data (helps Base finalize handshake)
-        const ack = { type: 'miniapp.client_ack', version: 1, received: ev.data, origin: window.location.origin, ts: Date.now() };
-        try {
-          window.parent.postMessage(ack, '*');
-          console.log('[miniapp.client_ack] sent', ack);
-        } catch (err) { console.warn('client_ack failed', err); }
-      } catch (e) {
-        console.warn('message parse error', e);
-      }
+        const d = ev.data || {};
+        // parent uses type "APPLY" in some logs — show it clearly
+        if (d && d.type === 'APPLY' && Array.isArray(d.path) && d.path.includes('ready')) {
+          console.log('[HANDSHAKE] parent applied ready ->', d);
+          // optionally send a confirmation back (not required by Base, but harmless)
+          window.parent.postMessage({ type: 'miniapp.ready.ack', version: 1 }, '*');
+        }
+      } catch (e) { /* ignore */ }
     };
     window.addEventListener('message', onMessage);
 

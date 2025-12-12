@@ -1,55 +1,70 @@
 // pages/_app.js
-import { useEffect } from "react";
-import "../styles/globals.css";
+import { useEffect } from 'react';
+import '../styles/globals.css';
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
-    // ফোকাসেড origins — প্রথমে base.dev, পরে base.build; প্রয়োজন হলে আরো যোগ করো
+    // Base preview origins (প্রয়োজনে আর যোগ করো)
     const ORIGINS = [
-      "https://base.dev",
-      "https://base.build",
-      "https://preview.base.build" // (optional)
+      'https://base.dev',
+      'https://base.build',
+      'https://preview.base.build',
+      'https://base.app'
     ];
 
-    const msg = { type: "miniapp.ready", version: 1 };
+    const readyMsg = { type: 'miniapp.ready', version: 1 };
 
-    // try to send to each origin (prefer explicit)
     const sendAll = (useWildcard = false) => {
       ORIGINS.forEach((o) => {
         try {
-          window?.parent?.postMessage(msg, o);
-          console.log("[miniapp.ready] sent ->", o, msg);
+          window?.parent?.postMessage(readyMsg, o);
+          console.log('[miniapp.ready] sent ->', o, readyMsg);
         } catch (e) {
-          console.warn("postMessage ->", o, "failed", e);
+          console.warn('[miniapp.ready] postMessage failed ->', o, e);
         }
       });
+
       if (useWildcard) {
         try {
-          window?.parent?.postMessage(msg, "*");
-          console.log("[miniapp.ready] sent -> wildcard", msg);
-        } catch (e) { console.warn("wildcard failed", e); }
+          window?.parent?.postMessage(readyMsg, '*');
+          console.log('[miniapp.ready] sent -> wildcard', readyMsg);
+        } catch (e) {
+          console.warn('[miniapp.ready] wildcard postMessage failed', e);
+        }
       }
     };
 
-    // immediate + retries
+    // immediate + retries (timing/race পরিস্থিতি কভার করতে)
     sendAll();
     const t1 = setTimeout(() => sendAll(), 400);
-    const t2 = setTimeout(() => sendAll(true), 1200); // last try with wildcard
+    const t2 = setTimeout(() => sendAll(true), 1200);
 
-    // also send every 2s for a short period (helps race/timing)
-    let cnt = 0;
+    let tries = 0;
     const interval = setInterval(() => {
-      if (cnt++ > 6) { clearInterval(interval); return; }
+      if (tries++ > 6) { clearInterval(interval); return; }
       sendAll();
     }, 2000);
 
     // send again when page becomes visible
     const onVis = () => { if (!document.hidden) sendAll(); };
-    document.addEventListener("visibilitychange", onVis);
+    document.addEventListener('visibilitychange', onVis);
+
+    // ---- Debug: listen to messages from parent and log them so preview shows useful info
+    const onMessage = (ev) => {
+      try {
+        // optional: filter by known origins if you want
+        // if (!ORIGINS.includes(ev.origin) && ev.origin !== 'null') return;
+        console.log('[from-parent message]', { origin: ev.origin, data: ev.data });
+      } catch (e) {
+        console.warn('message parse error', e);
+      }
+    };
+    window.addEventListener('message', onMessage);
 
     return () => {
       clearTimeout(t1); clearTimeout(t2); clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVis);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('message', onMessage);
     };
   }, []);
 

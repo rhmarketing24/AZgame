@@ -1,0 +1,6 @@
+{
+  "name": "A to Z Rush",
+  "short_name": "AZRush",
+  "start_url": "/",
+  "display": "standalone"
+}

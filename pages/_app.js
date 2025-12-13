@@ -5,25 +5,24 @@ import { sdk } from "@farcaster/miniapp-sdk";
 
 export default function App({ Component, pageProps }) {
   useEffect(() => {
-    let cancelled = false;
-
     async function init() {
       try {
-        // ✅ Official & required ready call
+        // 1️⃣ Farcaster Mini App ready
         await sdk.actions.ready();
-        if (!cancelled) {
-          console.log("[Farcaster MiniApp] ready called successfully");
-        }
+        console.log("Farcaster ready OK");
+
+        // 2️⃣ Base Mini App ready (REQUIRED)
+        window.parent.postMessage(
+          { type: "miniapp.ready", version: 1 },
+          "*"
+        );
+        console.log("Base miniapp.ready sent");
       } catch (err) {
-        console.error("[Farcaster MiniApp] ready failed", err);
+        console.error("Mini App init failed", err);
       }
     }
 
     init();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   return <Component {...pageProps} />;

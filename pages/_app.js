@@ -9,7 +9,7 @@ export default function App({ Component, pageProps }) {
 
     async function init() {
       try {
-        // ✅ THIS is the ONLY correct ready call for Farcaster Mini Apps
+        // ✅ Official & required ready call
         await sdk.actions.ready();
         if (!cancelled) {
           console.log("[Farcaster MiniApp] ready called successfully");
